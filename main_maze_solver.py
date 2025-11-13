@@ -69,10 +69,12 @@ def main():
         print("  --step-size N       : Simplify path by taking every Nth point (default: 5)")
         print("  --z-height Z        : Z-coordinate for robot movement (default: -45)")
         print("  --wall-clearance N  : Safety margin around walls in pixels (default: 5)")
+        print("  --debug             : Show detailed debug images at each processing step")
         sys.exit(1)
 
     image_path = sys.argv[1]
     use_robot = "--no-robot" not in sys.argv
+    debug_mode = "--debug" in sys.argv
 
     # Parse step size
     step_size = 5
@@ -154,9 +156,13 @@ def main():
 
     # Preprocess the maze
     print(f"\nPreprocessing maze (wall clearance: {wall_clearance}px)...")
-    binary_maze = preprocess_maze(image, wall_clearance=wall_clearance)
-    cv2.imshow("Preprocessed Maze", binary_maze)
-    cv2.waitKey(1000)
+    if debug_mode:
+        print("Debug mode: Showing detailed preprocessing steps...")
+    binary_maze = preprocess_maze(image, wall_clearance=wall_clearance, debug=debug_mode)
+
+    if not debug_mode:
+        cv2.imshow("Preprocessed Maze", binary_maze)
+        cv2.waitKey(1000)
 
     # Solve the maze
     print("\nSolving maze with A* algorithm...")

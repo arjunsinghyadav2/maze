@@ -190,19 +190,36 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Apply adaptive thresholding
-    binary = cv2.adaptiveThreshold(
+    # Use multiple thresholding methods and combine them
+    # Method 1: Otsu's thresholding (good for bimodal images)
+    _, binary_otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Method 2: Adaptive thresholding (good for varying lighting)
+    binary_adaptive = cv2.adaptiveThreshold(
         blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
+        cv2.THRESH_BINARY, 15, 3
     )
 
-    # Invert if needed (walls should be black/0, paths should be white/255)
-    # Check which color is more dominant to determine if we need to invert
-    white_pixels = np.sum(binary == 255)
-    black_pixels = np.sum(binary == 0)
+    # Method 3: Simple threshold at mid-gray
+    _, binary_simple = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
 
-    if black_pixels > white_pixels:
+    # Combine methods using bitwise AND (stricter - only white if all agree it's white)
+    binary = cv2.bitwise_and(binary_otsu, binary_adaptive)
+
+    # Check if we need to invert (walls should be black/0, paths should be white/255)
+    # Sample the center region - it's usually path in a maze
+    h, w = binary.shape
+    center_region = binary[h//4:3*h//4, w//4:3*w//4]
+    center_mean = np.mean(center_region)
+
+    # If center is dark, we probably need to invert
+    if center_mean < 128:
         binary = cv2.bitwise_not(binary)
+
+    # Clean up noise with morphological operations
+    kernel_small = np.ones((3, 3), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small)  # Remove small noise
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_small)  # Fill small holes
 
     # Remove circles from the binary image to avoid interference
     # Create a mask to remove any colored areas (high saturation)
@@ -220,6 +237,9 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Set colored areas to white (path) in the binary image
     binary[color_mask > 0] = 255
 
+    # Store the binary before clearance for debugging
+    binary_before_clearance = binary.copy()
+
     # Add wall clearance by dilating walls (eroding paths)
     # This creates a safety margin so the robot doesn't bump into walls
     if wall_clearance > 0:
@@ -236,12 +256,19 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         binary = cv2.bitwise_not(dilated_walls)
 
     if debug:
-        cv2.imshow("Original", image)
-        cv2.imshow("Gray", gray)
-        cv2.imshow("Binary (Before Clearance)", binary)
+        cv2.imshow("1. Original", image)
+        cv2.imshow("2. Grayscale", gray)
+        cv2.imshow("3. Otsu Threshold", binary_otsu)
+        cv2.imshow("4. Adaptive Threshold", binary_adaptive)
+        cv2.imshow("5. Combined", binary_before_clearance)
+        cv2.imshow("6. Color Mask (circles)", color_mask)
         if wall_clearance > 0:
-            cv2.imshow("Binary (With Clearance)", binary)
-        cv2.imshow("Color Mask", color_mask)
+            cv2.imshow("7. Final with Clearance", binary)
+        print("\nMaze preprocessing debug:")
+        print(f"  Center region mean brightness: {center_mean:.1f}")
+        print(f"  Final: Black pixels (walls): {np.sum(binary == 0)}")
+        print(f"  Final: White pixels (paths): {np.sum(binary == 255)}")
+        print("\nPress any key to continue...")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 

@@ -69,6 +69,7 @@ python main_maze_solver.py <maze_image_path> [OPTIONS]
 - `--step-size N` : Simplify path by taking every Nth point (default: 5)
 - `--z-height Z` : Z-coordinate for robot movement (default: -45)
 - `--wall-clearance N` : Safety margin around walls in pixels (default: 5)
+- `--debug` : Show detailed debug images at each processing step
 
 ### Examples:
 
@@ -90,6 +91,9 @@ python main_maze_solver.py my_maze.png --wall-clearance 8
 
 # Decrease wall clearance for narrow mazes
 python main_maze_solver.py my_maze.png --wall-clearance 3
+
+# Debug mode - see maze processing steps
+python main_maze_solver.py my_maze.png --no-robot --debug
 ```
 
 ## How It Works
@@ -104,7 +108,11 @@ The system detects circles using HSV color space filtering:
 ### 2. Maze Preprocessing
 - Converts image to grayscale
 - Applies Gaussian blur to reduce noise
-- Uses adaptive thresholding to extract maze structure
+- Uses **multiple thresholding methods**:
+  - Otsu's thresholding (bimodal distribution)
+  - Adaptive thresholding (varying lighting)
+  - Combines both for robust wall detection
+- Auto-detects if inversion needed (checks center region)
 - Removes colored circle areas to avoid interference
 - **Adds wall clearance** by dilating walls to create a safety margin
 - Result: Binary image (0 = wall, 255 = path) with clearance zones
@@ -163,12 +171,34 @@ The system automatically detects the red circle and then finds any other colored
 - Make the circle large enough (at least 100 pixels² area)
 - If using a non-green color, make it even larger (300+ pixels²) to avoid being filtered as noise
 
-### "No path found"
-- Check that maze has a valid path between start and goal
-- Ensure walls are thick enough (at least 5-8 pixels)
-- **Try reducing wall clearance**: `--wall-clearance 2` or `--wall-clearance 0`
+### "No path found" or "Path goes through walls"
+**First, diagnose the problem with debug mode:**
+```bash
+python main_maze_solver.py maze.png --no-robot --debug
+```
+
+This shows you 7 processing stages:
+1. Original image
+2. Grayscale conversion
+3. Otsu threshold
+4. Adaptive threshold
+5. Combined binary (walls should be BLACK, paths WHITE)
+6. Color mask (circles removed)
+7. Final with clearance
+
+**If walls aren't detected properly (stage 5):**
+- Ensure maze has good contrast (dark walls, light paths or vice versa)
+- Walls should be solid black or very dark
+- Paths should be white or very light
+- Avoid gradients or shadows
+
+**If path is blocked by clearance (stage 7):**
+- Try reducing wall clearance: `--wall-clearance 2` or `--wall-clearance 0`
 - The default clearance (5px) might be too large for narrow passages
-- Look at the "Preprocessed Maze" window to see if the path is blocked
+
+**If path goes through walls even after proper detection:**
+- This indicates a bug - please check the preprocessed maze window
+- The path should only follow white pixels in the binary maze
 
 ### Robot connection issues
 - Verify Dobot is connected to `/dev/ttyACM0`
