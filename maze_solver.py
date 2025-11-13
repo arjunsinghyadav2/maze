@@ -175,9 +175,9 @@ def visualize_path(image, path, start_pos, goal_pos):
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
         return vis_image
 
-    # Draw the path
+    # Draw the path with a thicker line for visibility
     for i in range(len(path) - 1):
-        cv2.line(vis_image, path[i], path[i + 1], (255, 0, 255), 2)
+        cv2.line(vis_image, path[i], path[i + 1], (255, 0, 255), 3)
 
     # Draw waypoints
     for i, pos in enumerate(path):
@@ -194,5 +194,10 @@ def visualize_path(image, path, start_pos, goal_pos):
     cv2.circle(vis_image, goal_pos, 8, (0, 255, 0), 2)
     cv2.putText(vis_image, "GOAL", (goal_pos[0] - 25, goal_pos[1] - 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    # Add text showing path info
+    path_info = f"Path length: {len(path)} points"
+    cv2.putText(vis_image, path_info, (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
     return vis_image

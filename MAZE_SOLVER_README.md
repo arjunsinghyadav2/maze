@@ -68,6 +68,7 @@ python main_maze_solver.py <maze_image_path> [OPTIONS]
 - `--no-robot` : Run without connecting to robot (visualization only)
 - `--step-size N` : Simplify path by taking every Nth point (default: 5)
 - `--z-height Z` : Z-coordinate for robot movement (default: -45)
+- `--wall-clearance N` : Safety margin around walls in pixels (default: 5)
 
 ### Examples:
 
@@ -83,6 +84,12 @@ python main_maze_solver.py my_maze.png --step-size 3
 
 # Adjust pen height
 python main_maze_solver.py my_maze.png --z-height -50
+
+# Increase wall clearance for wider paths
+python main_maze_solver.py my_maze.png --wall-clearance 8
+
+# Decrease wall clearance for narrow mazes
+python main_maze_solver.py my_maze.png --wall-clearance 3
 ```
 
 ## How It Works
@@ -99,7 +106,8 @@ The system detects circles using HSV color space filtering:
 - Applies Gaussian blur to reduce noise
 - Uses adaptive thresholding to extract maze structure
 - Removes colored circle areas to avoid interference
-- Result: Binary image (0 = wall, 255 = path)
+- **Adds wall clearance** by dilating walls to create a safety margin
+- Result: Binary image (0 = wall, 255 = path) with clearance zones
 
 ### 3. Pathfinding (A* Algorithm)
 - Uses A* search algorithm with Manhattan distance heuristic
@@ -158,7 +166,9 @@ The system automatically detects the red circle and then finds any other colored
 ### "No path found"
 - Check that maze has a valid path between start and goal
 - Ensure walls are thick enough (at least 5-8 pixels)
-- Try preprocessing with `--debug` flag to see binary maze
+- **Try reducing wall clearance**: `--wall-clearance 2` or `--wall-clearance 0`
+- The default clearance (5px) might be too large for narrow passages
+- Look at the "Preprocessed Maze" window to see if the path is blocked
 
 ### Robot connection issues
 - Verify Dobot is connected to `/dev/ttyACM0`

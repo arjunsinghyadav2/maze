@@ -63,11 +63,12 @@ def move_robot_along_path(device, M, path, z_height=-45):
 def main():
     # Parse command line arguments
     if len(sys.argv) < 2:
-        print("Usage: python main_maze_solver.py <maze_image_path> [--no-robot] [--step-size N] [--z-height Z]")
+        print("Usage: python main_maze_solver.py <maze_image_path> [OPTIONS]")
         print("\nOptions:")
-        print("  --no-robot      : Run without connecting to robot (visualization only)")
-        print("  --step-size N   : Simplify path by taking every Nth point (default: 5)")
-        print("  --z-height Z    : Z-coordinate for robot movement (default: -45)")
+        print("  --no-robot          : Run without connecting to robot (visualization only)")
+        print("  --step-size N       : Simplify path by taking every Nth point (default: 5)")
+        print("  --z-height Z        : Z-coordinate for robot movement (default: -45)")
+        print("  --wall-clearance N  : Safety margin around walls in pixels (default: 5)")
         sys.exit(1)
 
     image_path = sys.argv[1]
@@ -86,6 +87,13 @@ def main():
         idx = sys.argv.index("--z-height")
         if idx + 1 < len(sys.argv):
             z_height = float(sys.argv[idx + 1])
+
+    # Parse wall clearance
+    wall_clearance = 5
+    if "--wall-clearance" in sys.argv:
+        idx = sys.argv.index("--wall-clearance")
+        if idx + 1 < len(sys.argv):
+            wall_clearance = int(sys.argv[idx + 1])
 
     # Load the maze image
     print(f"Loading maze image: {image_path}")
@@ -145,8 +153,8 @@ def main():
             print("Invalid choice. Please enter 1 or 2.")
 
     # Preprocess the maze
-    print("\nPreprocessing maze...")
-    binary_maze = preprocess_maze(image)
+    print(f"\nPreprocessing maze (wall clearance: {wall_clearance}px)...")
+    binary_maze = preprocess_maze(image, wall_clearance=wall_clearance)
     cv2.imshow("Preprocessed Maze", binary_maze)
     cv2.waitKey(1000)
 

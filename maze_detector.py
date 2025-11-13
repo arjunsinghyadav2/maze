@@ -172,12 +172,13 @@ def detect_circles(image, color='red'):
         return None
 
 
-def preprocess_maze(image, debug=False):
+def preprocess_maze(image, wall_clearance=5, debug=False):
     """
     Preprocess the maze image to extract the maze structure.
 
     Args:
         image: BGR image of the maze
+        wall_clearance: Number of pixels to add as safety margin around walls (default: 5)
         debug: If True, show intermediate images
 
     Returns:
@@ -219,10 +220,27 @@ def preprocess_maze(image, debug=False):
     # Set colored areas to white (path) in the binary image
     binary[color_mask > 0] = 255
 
+    # Add wall clearance by dilating walls (eroding paths)
+    # This creates a safety margin so the robot doesn't bump into walls
+    if wall_clearance > 0:
+        # Create a kernel for dilation
+        clearance_kernel = np.ones((wall_clearance * 2 + 1, wall_clearance * 2 + 1), np.uint8)
+
+        # Invert to make walls white, paths black
+        inverted = cv2.bitwise_not(binary)
+
+        # Dilate the walls (make them thicker)
+        dilated_walls = cv2.dilate(inverted, clearance_kernel, iterations=1)
+
+        # Invert back to get the final binary maze
+        binary = cv2.bitwise_not(dilated_walls)
+
     if debug:
         cv2.imshow("Original", image)
         cv2.imshow("Gray", gray)
-        cv2.imshow("Binary", binary)
+        cv2.imshow("Binary (Before Clearance)", binary)
+        if wall_clearance > 0:
+            cv2.imshow("Binary (With Clearance)", binary)
         cv2.imshow("Color Mask", color_mask)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
