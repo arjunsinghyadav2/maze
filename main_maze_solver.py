@@ -4,7 +4,7 @@ Main Maze Solver Script
 
 This script:
 1. Reads a maze image
-2. Detects red and green circles (start/end markers)
+2. Detects red circle and automatically finds the other circle
 3. Allows user to specify which circle is start/end
 4. Solves the maze using A* pathfinding
 5. Converts pixel coordinates to robot coordinates
@@ -17,7 +17,7 @@ import sys
 import time
 import pydobot
 
-from maze_detector import detect_circles, preprocess_maze, visualize_detection
+from maze_detector import detect_red_circle, detect_other_circle, preprocess_maze, visualize_detection
 from maze_solver import a_star_search, simplify_path, visualize_path
 from camera_utilities import apply_affine, apply_homography
 from robot_utilities import move_to_home, move_to_specific_position, get_current_pose
@@ -97,24 +97,28 @@ def main():
 
     print(f"Image loaded: {image.shape[1]}x{image.shape[0]} pixels")
 
-    # Detect red and green circles
+    # Detect red circle first
     print("\nDetecting circles...")
-    red_pos = detect_circles(image, 'red')
-    green_pos = detect_circles(image, 'green')
+    red_pos = detect_red_circle(image)
 
     if red_pos is None:
         print("Error: Could not detect red circle!")
         sys.exit(1)
 
-    if green_pos is None:
-        print("Error: Could not detect green circle!")
+    print(f"Red circle found at: {red_pos}")
+
+    # Detect the other circle (any color)
+    other_pos = detect_other_circle(image, red_pos)
+
+    if other_pos is None:
+        print("Error: Could not detect the other circle!")
+        print("Make sure there are two colored circles in the image.")
         sys.exit(1)
 
-    print(f"Red circle found at: {red_pos}")
-    print(f"Green circle found at: {green_pos}")
+    print(f"Other circle found at: {other_pos}")
 
     # Visualize detected circles
-    detection_vis = visualize_detection(image, red_pos, green_pos)
+    detection_vis = visualize_detection(image, red_pos, other_pos)
     cv2.imshow("Detected Circles", detection_vis)
     cv2.waitKey(1000)  # Show for 1 second
 
@@ -122,20 +126,20 @@ def main():
     print("\n" + "="*50)
     print("Which circle should be the START?")
     print("  1. Red circle")
-    print("  2. Green circle")
+    print("  2. Other circle")
     print("="*50)
 
     while True:
         choice = input("Enter choice (1 or 2): ").strip()
         if choice == '1':
             start_pos = red_pos
-            goal_pos = green_pos
-            print("\n→ Start: RED circle, Goal: GREEN circle")
+            goal_pos = other_pos
+            print("\n→ Start: RED circle, Goal: OTHER circle")
             break
         elif choice == '2':
-            start_pos = green_pos
+            start_pos = other_pos
             goal_pos = red_pos
-            print("\n→ Start: GREEN circle, Goal: RED circle")
+            print("\n→ Start: OTHER circle, Goal: RED circle")
             break
         else:
             print("Invalid choice. Please enter 1 or 2.")

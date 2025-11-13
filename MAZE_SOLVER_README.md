@@ -2,7 +2,7 @@
 
 A comprehensive maze solving system that:
 1. Reads a maze image
-2. Detects red and green circles (start/end markers)
+2. Detects red circle and automatically finds the other circle (any color)
 3. Solves the maze using A* pathfinding algorithm
 4. Converts pixel coordinates to Dobot robot coordinates
 5. Moves the Dobot robot along the solved path
@@ -88,9 +88,9 @@ python main_maze_solver.py my_maze.png --z-height -50
 ## How It Works
 
 ### 1. Circle Detection
-The system detects red and green circles using HSV color space filtering:
+The system detects circles using HSV color space filtering:
 - **Red circle**: HSV range [0-10, 160-180] with saturation > 100
-- **Green circle**: HSV range [40-80] with saturation > 50
+- **Other circle**: Automatically detected as any saturated colored region that isn't the red circle
 
 ### 2. Maze Preprocessing
 - Converts image to grayscale
@@ -135,16 +135,21 @@ Your maze image should have:
 1. **White background** for paths
 2. **Black walls** for obstacles
 3. **One red circle** as a marker (start or end)
-4. **One green circle** as a marker (end or start)
+4. **One other colored circle** (any color: green, blue, yellow, etc.) as the second marker
 
-The user will be prompted to choose which colored circle is the start point.
+The system automatically detects the red circle and then finds any other colored circle. The user will be prompted to choose which circle is the start point.
 
 ## Troubleshooting
 
-### "Could not detect red/green circle"
-- Ensure circles are clearly visible in good lighting
-- Check that colors are saturated enough (not too pale)
+### "Could not detect red circle"
+- Ensure the red circle is clearly visible in good lighting
+- Check that the red color is saturated enough (not too pale/pink)
 - Adjust HSV ranges in `maze_detector.py` if needed
+
+### "Could not detect the other circle"
+- Ensure the second circle has a saturated color (not gray/white/black)
+- The circle should be at least 50 pixels away from the red circle
+- Try using brighter, more saturated colors (green, blue, yellow work well)
 
 ### "No path found"
 - Check that maze has a valid path between start and goal
