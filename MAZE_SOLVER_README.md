@@ -90,7 +90,9 @@ python main_maze_solver.py my_maze.png --z-height -50
 ### 1. Circle Detection
 The system detects circles using HSV color space filtering:
 - **Red circle**: HSV range [0-10, 160-180] with saturation > 100
-- **Other circle**: Automatically detected as any saturated colored region that isn't the red circle
+- **Other circle**: Two-stage detection to avoid noise:
+  1. First, searches for green circles (broad HSV range 30-90)
+  2. If no green found, searches for any saturated color with stricter area filtering
 
 ### 2. Maze Preprocessing
 - Converts image to grayscale
@@ -147,9 +149,11 @@ The system automatically detects the red circle and then finds any other colored
 - Adjust HSV ranges in `maze_detector.py` if needed
 
 ### "Could not detect the other circle"
+- **Use green for best results** - the algorithm prioritizes green circles
 - Ensure the second circle has a saturated color (not gray/white/black)
 - The circle should be at least 50 pixels away from the red circle
-- Try using brighter, more saturated colors (green, blue, yellow work well)
+- Make the circle large enough (at least 100 pixels² area)
+- If using a non-green color, make it even larger (300+ pixels²) to avoid being filtered as noise
 
 ### "No path found"
 - Check that maze has a valid path between start and goal
