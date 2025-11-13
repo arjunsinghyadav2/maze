@@ -109,13 +109,16 @@ The system detects circles using HSV color space filtering:
 - Converts image to grayscale
 - Applies Gaussian blur to reduce noise
 - Uses **multiple thresholding methods**:
-  - Otsu's thresholding (bimodal distribution)
-  - Adaptive thresholding (varying lighting)
-  - Combines both for robust wall detection
+  - Simple threshold at 127 (mid-gray)
+  - Otsu's thresholding (auto-calculated)
+  - Combines with OR (detects walls from either method)
 - Auto-detects if inversion needed (checks center region)
+- **Morphological operations to fix broken lines**:
+  - MORPH_CLOSE (5x5, 2 iterations) connects wall gaps
+  - Wall dilation (3x3) strengthens thin lines
 - Removes colored circle areas to avoid interference
 - **Adds wall clearance** by dilating walls to create a safety margin
-- Result: Binary image (0 = wall, 255 = path) with clearance zones
+- Result: Binary image (0 = wall, 255 = path) with solid walls
 
 ### 3. Pathfinding (A* Algorithm)
 - Uses A* search algorithm with Manhattan distance heuristic
@@ -180,9 +183,9 @@ python main_maze_solver.py maze.png --no-robot --debug
 This shows you 7 processing stages:
 1. Original image
 2. Grayscale conversion
-3. Otsu threshold
-4. Adaptive threshold
-5. Combined binary (walls should be BLACK, paths WHITE)
+3. Simple threshold (127)
+4. Otsu threshold
+5. Combined with gap closing (walls should be SOLID BLACK, paths WHITE)
 6. Color mask (circles removed)
 7. Final with clearance
 

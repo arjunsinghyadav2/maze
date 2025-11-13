@@ -187,27 +187,21 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Apply Gaussian blur to reduce noise
+    # Apply stronger blur to connect broken lines
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Use multiple thresholding methods and combine them
-    # Method 1: Otsu's thresholding (good for bimodal images)
-    _, binary_otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Method 2: Adaptive thresholding (good for varying lighting)
-    binary_adaptive = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 15, 3
-    )
-
-    # Method 3: Simple threshold at mid-gray
+    # Use a simple, aggressive threshold approach
+    # Anything darker than mid-gray becomes a wall
     _, binary_simple = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
 
-    # Combine methods using bitwise AND (stricter - only white if all agree it's white)
-    binary = cv2.bitwise_and(binary_otsu, binary_adaptive)
+    # Also try Otsu for comparison
+    _, binary_otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Use OR to combine (more lenient - detects walls from either method)
+    # This helps capture all wall pixels
+    binary = cv2.bitwise_or(binary_simple, binary_otsu)
 
     # Check if we need to invert (walls should be black/0, paths should be white/255)
-    # Sample the center region - it's usually path in a maze
     h, w = binary.shape
     center_region = binary[h//4:3*h//4, w//4:3*w//4]
     center_mean = np.mean(center_region)
@@ -216,13 +210,23 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     if center_mean < 128:
         binary = cv2.bitwise_not(binary)
 
-    # Clean up noise with morphological operations
+    # IMPORTANT: Close gaps in walls with morphological closing
+    # This connects broken wall lines
+    kernel_closing = np.ones((5, 5), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_closing, iterations=2)
+
+    # Clean up small noise
     kernel_small = np.ones((3, 3), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small)  # Remove small noise
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_small)  # Fill small holes
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small)
+
+    # Strengthen the walls by dilating them slightly
+    kernel_wall = np.ones((3, 3), np.uint8)
+    # Invert, dilate walls, invert back
+    inverted = cv2.bitwise_not(binary)
+    dilated_walls = cv2.dilate(inverted, kernel_wall, iterations=1)
+    binary = cv2.bitwise_not(dilated_walls)
 
     # Remove circles from the binary image to avoid interference
-    # Create a mask to remove any colored areas (high saturation)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
     # Mask for any saturated colors (circles)
@@ -258,14 +262,17 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     if debug:
         cv2.imshow("1. Original", image)
         cv2.imshow("2. Grayscale", gray)
-        cv2.imshow("3. Otsu Threshold", binary_otsu)
-        cv2.imshow("4. Adaptive Threshold", binary_adaptive)
-        cv2.imshow("5. Combined", binary_before_clearance)
+        cv2.imshow("3. Simple Threshold (127)", binary_simple)
+        cv2.imshow("4. Otsu Threshold", binary_otsu)
+        cv2.imshow("5. Combined (OR)", binary_before_clearance)
         cv2.imshow("6. Color Mask (circles)", color_mask)
         if wall_clearance > 0:
             cv2.imshow("7. Final with Clearance", binary)
         print("\nMaze preprocessing debug:")
         print(f"  Center region mean brightness: {center_mean:.1f}")
+        print(f"  Morphological operations applied:")
+        print(f"    - MORPH_CLOSE (5x5, 2 iterations) to connect wall gaps")
+        print(f"    - Wall dilation (3x3) to strengthen lines")
         print(f"  Final: Black pixels (walls): {np.sum(binary == 0)}")
         print(f"  Final: White pixels (paths): {np.sum(binary == 255)}")
         print("\nPress any key to continue...")
