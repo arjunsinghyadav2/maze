@@ -224,15 +224,7 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Set colored areas to white (path) in the binary image
     binary[color_mask > 0] = 255
 
-    # Fill small holes in the path using morphological closing
-    kernel_fill = np.ones((5, 5), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_fill, iterations=1)
-
-    # Remove small noise
-    kernel_small = np.ones((3, 3), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small, iterations=1)
-
-    # Store the binary before clearance for debugging
+    # Store the binary before clearance for debugging (this is the clean edge-based maze)
     binary_before_clearance = binary.copy()
 
     # Add wall clearance by dilating walls (eroding paths)
