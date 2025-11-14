@@ -214,11 +214,17 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Invert: walls=0 (black), paths=255 (white) for maze solver
     binary = cv2.bitwise_not(walls_white)
 
+    # Store binary before removing circles
+    binary_before_circle_removal = binary.copy()
+
     # Remove colored circles from the maze (make them paths)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     color_mask = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([180, 255, 255]))
     color_mask = cv2.dilate(color_mask, np.ones((15, 15), np.uint8), iterations=1)
     binary[color_mask > 0] = 255  # Set circles to path
+
+    # Store binary after circle removal but before clearance
+    binary_after_circle_removal = binary.copy()
 
     # Add wall clearance if needed
     if wall_clearance > 0:
@@ -235,17 +241,27 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         cv2.imshow("5. Sobel Thresholded", edges)
         cv2.imshow("6. Edges Closed", edges_closed)
         cv2.imshow("7. Edges Closed & Dilated (WALLS=WHITE) ***PERFECT***", walls_white)
-        cv2.imshow("8. Inverted (WALLS=0, PATHS=255)", binary)
+        cv2.imshow("8. Inverted (WALLS=0/BLACK, PATHS=255/WHITE)", binary_before_circle_removal)
+        cv2.imshow("9. After Circle Removal", binary_after_circle_removal)
+        if wall_clearance > 0:
+            cv2.imshow("10. After Wall Clearance", binary)
 
         print("\n" + "="*60)
         print("MAZE PREPROCESSING PIPELINE - SOBEL METHOD")
         print("="*60)
-        print(f"\nStage 7 (Edges Closed & Dilated) is the perfect wall detection")
+        print(f"\nStage 7 (Edges Closed & Dilated) - PERFECT:")
         print(f"  White pixels (walls): {np.sum(walls_white == 255)}")
         print(f"  Black pixels (paths): {np.sum(walls_white == 0)}")
-        print(f"\nFinal binary maze (for solver):")
-        print(f"  Walls (0): {np.sum(binary == 0)}")
-        print(f"  Paths (255): {np.sum(binary == 255)}")
+        print(f"\nStage 8 (Inverted - before circle removal):")
+        print(f"  Black pixels (walls): {np.sum(binary_before_circle_removal == 0)}")
+        print(f"  White pixels (paths): {np.sum(binary_before_circle_removal == 255)}")
+        print(f"\nStage 9 (After circle removal):")
+        print(f"  Black pixels (walls): {np.sum(binary_after_circle_removal == 0)}")
+        print(f"  White pixels (paths): {np.sum(binary_after_circle_removal == 255)}")
+        if wall_clearance > 0:
+            print(f"\nStage 10 (After wall clearance):")
+            print(f"  Black pixels (walls): {np.sum(binary == 0)}")
+            print(f"  White pixels (paths): {np.sum(binary == 255)}")
         print("\nPress any key to continue...")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
