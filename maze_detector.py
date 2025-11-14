@@ -175,12 +175,12 @@ def detect_circles(image, color='red'):
 def preprocess_maze(image, wall_clearance=5, debug=False):
     """
     Preprocess the maze image to extract the maze structure.
-    Tries various edge detection methods and shows them in debug mode.
+    Uses edge detection with morphological operations.
 
     Args:
         image: BGR image of the maze
         wall_clearance: Number of pixels to add as safety margin around walls (default: 5)
-        debug: If True, show intermediate images for all edge detection methods
+        debug: If True, show intermediate images
 
     Returns:
         Binary maze image (0 = wall, 255 = path)
@@ -191,65 +191,7 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    if debug:
-        # Show various edge detection methods
-        cv2.imshow("1. Original", image)
-        cv2.imshow("2. Grayscale", gray)
-        cv2.imshow("3. Blurred", blurred)
-
-        # Method 1: Canny Edge Detection (auto threshold)
-        median = np.median(blurred)
-        lower = int(max(0, 0.5 * median))
-        upper = int(min(255, 1.5 * median))
-        canny_auto = cv2.Canny(blurred, lower, upper)
-        cv2.imshow("4a. Canny (auto)", canny_auto)
-
-        # Method 2: Canny with fixed thresholds
-        canny_50_150 = cv2.Canny(blurred, 50, 150)
-        cv2.imshow("4b. Canny (50, 150)", canny_50_150)
-
-        # Method 3: Sobel X and Y
-        sobelx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=3)
-        sobely = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)
-        sobel = np.sqrt(sobelx**2 + sobely**2)
-        sobel = np.uint8(sobel / sobel.max() * 255)
-        cv2.imshow("4c. Sobel", sobel)
-
-        # Method 4: Laplacian
-        laplacian = cv2.Laplacian(blurred, cv2.CV_64F)
-        laplacian = np.uint8(np.absolute(laplacian))
-        cv2.imshow("4d. Laplacian", laplacian)
-
-        # Method 5: Simple threshold
-        _, thresh_binary = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
-        cv2.imshow("4e. Binary Threshold (127)", thresh_binary)
-
-        # Method 6: Otsu threshold
-        _, thresh_otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        cv2.imshow("4f. Otsu Threshold", thresh_otsu)
-
-        # Method 7: Adaptive threshold
-        adaptive = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                         cv2.THRESH_BINARY, 11, 2)
-        cv2.imshow("4g. Adaptive Threshold", adaptive)
-
-        print("\n" + "="*60)
-        print("EDGE DETECTION METHODS COMPARISON")
-        print("="*60)
-        print("\nTry these different methods:")
-        print("  4a: Canny (auto-threshold based on median)")
-        print("  4b: Canny (fixed 50, 150)")
-        print("  4c: Sobel (gradient magnitude)")
-        print("  4d: Laplacian (second derivative)")
-        print("  4e: Binary Threshold (fixed 127)")
-        print("  4f: Otsu Threshold (automatic)")
-        print("  4g: Adaptive Threshold (local)")
-        print("\nWhich method shows the maze walls best?")
-        print("\nPress any key to continue...")
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-    # For now, use Canny with auto threshold as default
+    # Canny edge detection
     median = np.median(blurred)
     lower = int(max(0, 0.5 * median))
     upper = int(min(255, 1.5 * median))
@@ -257,19 +199,19 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
 
     # Connect broken edges
     kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
+    edges_closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
 
-    # Dilate to thicken walls
-    walls = cv2.dilate(edges, kernel, iterations=2)
+    # Dilate to thicken walls - THIS IS THE PERFECT STAGE (walls=white)
+    walls_white = cv2.dilate(edges_closed, kernel, iterations=2)
 
-    # Invert: walls=black, paths=white
-    binary = cv2.bitwise_not(walls)
+    # Invert: walls=0 (black), paths=255 (white) for maze solver
+    binary = cv2.bitwise_not(walls_white)
 
-    # Remove colored circles from the maze
+    # Remove colored circles from the maze (make them paths)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     color_mask = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([180, 255, 255]))
     color_mask = cv2.dilate(color_mask, np.ones((15, 15), np.uint8), iterations=1)
-    binary[color_mask > 0] = 255
+    binary[color_mask > 0] = 255  # Set circles to path
 
     # Add wall clearance if needed
     if wall_clearance > 0:
@@ -277,6 +219,28 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         inverted = cv2.bitwise_not(binary)
         dilated_walls = cv2.dilate(inverted, clearance_kernel, iterations=1)
         binary = cv2.bitwise_not(dilated_walls)
+
+    if debug:
+        cv2.imshow("1. Original", image)
+        cv2.imshow("2. Grayscale", gray)
+        cv2.imshow("3. Blurred", blurred)
+        cv2.imshow("4. Canny Edges", edges)
+        cv2.imshow("5. Edges Closed", edges_closed)
+        cv2.imshow("6. Edges Closed & Dilated (WALLS=WHITE) ***PERFECT***", walls_white)
+        cv2.imshow("7. Inverted (WALLS=0, PATHS=255)", binary)
+
+        print("\n" + "="*60)
+        print("MAZE PREPROCESSING PIPELINE")
+        print("="*60)
+        print(f"\nStage 6 (Edges Closed & Dilated) is the perfect wall detection")
+        print(f"  White pixels (walls): {np.sum(walls_white == 255)}")
+        print(f"  Black pixels (paths): {np.sum(walls_white == 0)}")
+        print(f"\nFinal binary maze (for solver):")
+        print(f"  Walls (0): {np.sum(binary == 0)}")
+        print(f"  Paths (255): {np.sum(binary == 255)}")
+        print("\nPress any key to continue...")
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     return binary
 
