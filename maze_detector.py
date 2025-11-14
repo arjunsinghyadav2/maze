@@ -187,19 +187,11 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Apply stronger blur to connect broken lines
+    # Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Use a simple, aggressive threshold approach
-    # Anything darker than mid-gray becomes a wall
-    _, binary_simple = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
-
-    # Also try Otsu for comparison
-    _, binary_otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Use OR to combine (more lenient - detects walls from either method)
-    # This helps capture all wall pixels
-    binary = cv2.bitwise_or(binary_simple, binary_otsu)
+    # Use Otsu's thresholding (works best for this case)
+    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # Check if we need to invert (walls should be black/0, paths should be white/255)
     h, w = binary.shape
@@ -210,21 +202,13 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     if center_mean < 128:
         binary = cv2.bitwise_not(binary)
 
-    # IMPORTANT: Close gaps in walls with morphological closing
-    # This connects broken wall lines
+    # Close gaps in walls with morphological closing
     kernel_closing = np.ones((5, 5), np.uint8)
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_closing, iterations=2)
 
-    # Clean up small noise
+    # Remove small noise (background speckles outside maze)
     kernel_small = np.ones((3, 3), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small)
-
-    # Strengthen the walls by dilating them slightly
-    kernel_wall = np.ones((3, 3), np.uint8)
-    # Invert, dilate walls, invert back
-    inverted = cv2.bitwise_not(binary)
-    dilated_walls = cv2.dilate(inverted, kernel_wall, iterations=1)
-    binary = cv2.bitwise_not(dilated_walls)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small, iterations=2)
 
     # Remove circles from the binary image to avoid interference
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
@@ -262,17 +246,16 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     if debug:
         cv2.imshow("1. Original", image)
         cv2.imshow("2. Grayscale", gray)
-        cv2.imshow("3. Simple Threshold (127)", binary_simple)
-        cv2.imshow("4. Otsu Threshold", binary_otsu)
-        cv2.imshow("5. Combined (OR)", binary_before_clearance)
-        cv2.imshow("6. Color Mask (circles)", color_mask)
+        cv2.imshow("3. Otsu Threshold", binary_before_clearance)
+        cv2.imshow("4. Color Mask (circles)", color_mask)
         if wall_clearance > 0:
-            cv2.imshow("7. Final with Clearance", binary)
+            cv2.imshow("5. Final with Clearance", binary)
         print("\nMaze preprocessing debug:")
+        print(f"  Using Otsu's thresholding (auto-calculated threshold)")
         print(f"  Center region mean brightness: {center_mean:.1f}")
         print(f"  Morphological operations applied:")
         print(f"    - MORPH_CLOSE (5x5, 2 iterations) to connect wall gaps")
-        print(f"    - Wall dilation (3x3) to strengthen lines")
+        print(f"    - MORPH_OPEN (3x3, 2 iterations) to remove background noise")
         print(f"  Final: Black pixels (walls): {np.sum(binary == 0)}")
         print(f"  Final: White pixels (paths): {np.sum(binary == 255)}")
         print("\nPress any key to continue...")

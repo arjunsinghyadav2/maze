@@ -108,17 +108,14 @@ The system detects circles using HSV color space filtering:
 ### 2. Maze Preprocessing
 - Converts image to grayscale
 - Applies Gaussian blur to reduce noise
-- Uses **multiple thresholding methods**:
-  - Simple threshold at 127 (mid-gray)
-  - Otsu's thresholding (auto-calculated)
-  - Combines with OR (detects walls from either method)
+- Uses **Otsu's thresholding** (auto-calculated optimal threshold)
 - Auto-detects if inversion needed (checks center region)
-- **Morphological operations to fix broken lines**:
+- **Morphological operations**:
   - MORPH_CLOSE (5x5, 2 iterations) connects wall gaps
-  - Wall dilation (3x3) strengthens thin lines
+  - MORPH_OPEN (3x3, 2 iterations) removes background noise
 - Removes colored circle areas to avoid interference
 - **Adds wall clearance** by dilating walls to create a safety margin
-- Result: Binary image (0 = wall, 255 = path) with solid walls
+- Result: Binary image (0 = wall, 255 = path) with clean solid walls
 
 ### 3. Pathfinding (A* Algorithm)
 - Uses A* search algorithm with Manhattan distance heuristic
@@ -180,22 +177,20 @@ The system automatically detects the red circle and then finds any other colored
 python main_maze_solver.py maze.png --no-robot --debug
 ```
 
-This shows you 7 processing stages:
+This shows you processing stages:
 1. Original image
 2. Grayscale conversion
-3. Simple threshold (127)
-4. Otsu threshold
-5. Combined with gap closing (walls should be SOLID BLACK, paths WHITE)
-6. Color mask (circles removed)
-7. Final with clearance
+3. Otsu threshold with morphological operations (walls should be SOLID BLACK, paths WHITE)
+4. Color mask (circles removed)
+5. Final with clearance
 
-**If walls aren't detected properly (stage 5):**
+**If walls aren't detected properly (stage 3):**
 - Ensure maze has good contrast (dark walls, light paths or vice versa)
 - Walls should be solid black or very dark
 - Paths should be white or very light
 - Avoid gradients or shadows
 
-**If path is blocked by clearance (stage 7):**
+**If path is blocked by clearance (stage 5):**
 - Try reducing wall clearance: `--wall-clearance 2` or `--wall-clearance 0`
 - The default clearance (5px) might be too large for narrow passages
 
