@@ -206,16 +206,45 @@ def main():
     binary_maze = preprocess_maze(image, wall_clearance=wall_clearance, debug=debug_mode,
                                    start_pos=start_pos, goal_pos=goal_pos, circle_radius=45)
 
+    # Save the binary maze for debugging
+    if image_path:
+        binary_maze_path = image_path.replace('.', '_binary_maze.')
+    else:
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        binary_maze_path = f"binary_maze_{timestamp}.png"
+
+    cv2.imwrite(binary_maze_path, binary_maze)
+    print(f"✓ Binary maze saved to: {binary_maze_path}")
+
     if not debug_mode:
         cv2.imshow("Preprocessed Maze", binary_maze)
         cv2.waitKey(1000)
 
+    # Validate start and goal positions
+    print("\nValidating start and goal positions...")
+    h, w = binary_maze.shape
+    print(f"  Maze size: {w}x{h}")
+    print(f"  Start position: {start_pos} -> pixel value: {binary_maze[start_pos[1], start_pos[0]]}")
+    print(f"  Goal position: {goal_pos} -> pixel value: {binary_maze[goal_pos[1], goal_pos[0]]}")
+
+    if binary_maze[start_pos[1], start_pos[0]] == 0:
+        print("  ⚠ WARNING: Start position is on a wall (black pixel)!")
+    if binary_maze[goal_pos[1], goal_pos[0]] == 0:
+        print("  ⚠ WARNING: Goal position is on a wall (black pixel)!")
+
     # Solve the maze
     print("\nSolving maze with A* algorithm...")
-    path = a_star_search(binary_maze, start_pos, goal_pos)
+    path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True)
 
     if path is None:
         print("Error: No path found through the maze!")
+        print("\nDebug info:")
+        print(f"  Binary maze min/max: {binary_maze.min()}/{binary_maze.max()}")
+        print(f"  Path pixels (255): {np.sum(binary_maze == 255)}")
+        print(f"  Wall pixels (0): {np.sum(binary_maze == 0)}")
+        print(f"  Wall percentage: {100 * np.sum(binary_maze == 0) / binary_maze.size:.1f}%")
+        print(f"\nPlease check the saved binary maze: {binary_maze_path}")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         sys.exit(1)

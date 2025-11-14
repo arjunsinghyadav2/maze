@@ -50,7 +50,7 @@ def manhattan_distance(pos1, pos2):
     return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
 
-def a_star_search(maze, start, goal):
+def a_star_search(maze, start, goal, verbose=False):
     """
     A* pathfinding algorithm to find path from start to goal.
 
@@ -58,17 +58,23 @@ def a_star_search(maze, start, goal):
         maze: Binary maze image (0 = wall, 255 = path)
         start: (x, y) starting position
         goal: (x, y) goal position
+        verbose: If True, print debug information
 
     Returns:
         List of (x, y) positions from start to goal, or None if no path
     """
     if not is_valid_position(maze, start):
-        print(f"Start position {start} is not valid!")
+        print(f"  ✗ Start position {start} is not valid (on wall or out of bounds)!")
         return None
 
     if not is_valid_position(maze, goal):
-        print(f"Goal position {goal} is not valid!")
+        print(f"  ✗ Goal position {goal} is not valid (on wall or out of bounds)!")
         return None
+
+    if verbose:
+        print(f"  ✓ Start position {start} is valid")
+        print(f"  ✓ Goal position {goal} is valid")
+        print(f"  Manhattan distance: {manhattan_distance(start, goal)}")
 
     # Priority queue: (f_score, counter, position)
     # counter ensures FIFO ordering for equal f_scores
@@ -88,10 +94,14 @@ def a_star_search(maze, start, goal):
     # Keep track of positions in open set for faster lookup
     open_set_hash = {start}
 
+    # Track explored positions
+    explored = 0
+
     while open_set:
         # Get position with lowest f_score
         current_f, _, current = heapq.heappop(open_set)
         open_set_hash.discard(current)
+        explored += 1
 
         # Check if we reached the goal
         if current == goal:
@@ -102,6 +112,8 @@ def a_star_search(maze, start, goal):
                 current = came_from[current]
             path.append(start)
             path.reverse()
+            if verbose:
+                print(f"  ✓ Path found! Explored {explored} positions")
             return path
 
         # Check all neighbors
@@ -125,6 +137,9 @@ def a_star_search(maze, start, goal):
                     open_set_hash.add(neighbor)
 
     # No path found
+    if verbose:
+        print(f"  ✗ No path found after exploring {explored} positions")
+        print(f"  Positions in g_score: {len(g_score)}")
     return None
 
 
