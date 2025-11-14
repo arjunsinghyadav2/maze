@@ -200,9 +200,11 @@ def main():
 
     # Preprocess the maze
     print(f"\nPreprocessing maze (wall clearance: {wall_clearance}px)...")
+    print(f"Circle removal: Localized within 45px of start and goal positions")
     if debug_mode:
         print("Debug mode: Showing detailed preprocessing steps...")
-    binary_maze = preprocess_maze(image, wall_clearance=wall_clearance, debug=debug_mode)
+    binary_maze = preprocess_maze(image, wall_clearance=wall_clearance, debug=debug_mode,
+                                   start_pos=start_pos, goal_pos=goal_pos, circle_radius=45)
 
     if not debug_mode:
         cv2.imshow("Preprocessed Maze", binary_maze)

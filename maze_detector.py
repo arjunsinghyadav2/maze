@@ -172,7 +172,7 @@ def detect_circles(image, color='red'):
         return None
 
 
-def preprocess_maze(image, wall_clearance=5, debug=False):
+def preprocess_maze(image, wall_clearance=5, debug=False, start_pos=None, goal_pos=None, circle_radius=45):
     """
     Preprocess the maze image to extract the maze structure.
     Uses edge detection with morphological operations.
@@ -181,6 +181,9 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         image: BGR image of the maze
         wall_clearance: Number of pixels to add as safety margin around walls (default: 5)
         debug: If True, show intermediate images
+        start_pos: (x, y) position of start circle (optional, for localized circle removal)
+        goal_pos: (x, y) position of goal circle (optional, for localized circle removal)
+        circle_radius: Radius around start/goal to remove circles (default: 45 pixels)
 
     Returns:
         Binary maze image (0 = wall, 255 = path)
@@ -217,11 +220,31 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Store binary before removing circles
     binary_before_circle_removal = binary.copy()
 
-    # Remove colored circles from the maze (make them paths)
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    color_mask = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([180, 255, 255]))
-    color_mask = cv2.dilate(color_mask, np.ones((15, 15), np.uint8), iterations=1)
-    binary[color_mask > 0] = 255  # Set circles to path
+    # Remove colored circles ONLY around start and goal positions (localized removal)
+    if start_pos is not None or goal_pos is not None:
+        # Create mask for colored regions
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        color_mask = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([180, 255, 255]))
+        color_mask_dilated = cv2.dilate(color_mask, np.ones((15, 15), np.uint8), iterations=1)
+
+        # Create a localized mask - only remove circles near start/goal
+        localized_mask = np.zeros_like(color_mask_dilated)
+
+        if start_pos is not None:
+            cv2.circle(localized_mask, start_pos, circle_radius, 255, -1)
+
+        if goal_pos is not None:
+            cv2.circle(localized_mask, goal_pos, circle_radius, 255, -1)
+
+        # Only remove colors within the localized regions
+        final_color_mask = cv2.bitwise_and(color_mask_dilated, localized_mask)
+        binary[final_color_mask > 0] = 255  # Set circles to path
+    else:
+        # Fallback: remove all colored circles (old behavior)
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        color_mask = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([180, 255, 255]))
+        color_mask = cv2.dilate(color_mask, np.ones((15, 15), np.uint8), iterations=1)
+        binary[color_mask > 0] = 255
 
     # Store binary after circle removal but before clearance
     binary_after_circle_removal = binary.copy()
@@ -242,6 +265,18 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         cv2.imshow("6. Edges Closed", edges_closed)
         cv2.imshow("7. Edges Closed & Dilated (WALLS=WHITE) ***PERFECT***", walls_white)
         cv2.imshow("8. Inverted (WALLS=0/BLACK, PATHS=255/WHITE)", binary_before_circle_removal)
+
+        # Show localized circle removal mask if positions provided
+        if start_pos is not None or goal_pos is not None:
+            # Visualize the localized removal regions
+            vis_localized = binary_before_circle_removal.copy()
+            vis_localized = cv2.cvtColor(vis_localized, cv2.COLOR_GRAY2BGR)
+            if start_pos is not None:
+                cv2.circle(vis_localized, start_pos, circle_radius, (0, 255, 0), 2)
+            if goal_pos is not None:
+                cv2.circle(vis_localized, goal_pos, circle_radius, (255, 0, 0), 2)
+            cv2.imshow("8b. Localized Circle Removal Zones", vis_localized)
+
         cv2.imshow("9. After Circle Removal", binary_after_circle_removal)
         if wall_clearance > 0:
             cv2.imshow("10. After Wall Clearance", binary)
@@ -249,6 +284,14 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         print("\n" + "="*60)
         print("MAZE PREPROCESSING PIPELINE - SOBEL METHOD")
         print("="*60)
+        if start_pos is not None or goal_pos is not None:
+            print(f"\nCircle removal: LOCALIZED (radius={circle_radius}px)")
+            if start_pos:
+                print(f"  Start position: {start_pos}")
+            if goal_pos:
+                print(f"  Goal position: {goal_pos}")
+        else:
+            print(f"\nCircle removal: GLOBAL (entire image)")
         print(f"\nStage 7 (Edges Closed & Dilated) - PERFECT:")
         print(f"  White pixels (walls): {np.sum(walls_white == 255)}")
         print(f"  Black pixels (paths): {np.sum(walls_white == 0)}")
@@ -258,6 +301,7 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         print(f"\nStage 9 (After circle removal):")
         print(f"  Black pixels (walls): {np.sum(binary_after_circle_removal == 0)}")
         print(f"  White pixels (paths): {np.sum(binary_after_circle_removal == 255)}")
+        print(f"  Wall pixels PRESERVED: {np.sum(binary_before_circle_removal == 0) - np.sum(binary_after_circle_removal == 0)} removed")
         if wall_clearance > 0:
             print(f"\nStage 10 (After wall clearance):")
             print(f"  Black pixels (walls): {np.sum(binary == 0)}")
