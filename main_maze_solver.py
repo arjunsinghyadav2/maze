@@ -113,22 +113,34 @@ def main():
 
         print(f"Image loaded: {image.shape[1]}x{image.shape[0]} pixels")
     else:
-        # Capture from camera
+        # Capture from camera with same setup as open_camera.py
         print("No image path provided - capturing from camera (device 0)...")
         print("Position your maze in front of the camera")
         print("Press SPACE to capture, ESC to exit")
 
-        cap = cv2.VideoCapture(0)
+        # Camera configuration (matches open_camera.py)
+        cam_index = 0
+        width, height = 640, 480
+
+        cap = cv2.VideoCapture(cam_index, cv2.CAP_ANY)
         if not cap.isOpened():
-            print("Error: Could not open camera device 0")
+            print(f"Error: Could not open camera device {cam_index}")
             sys.exit(1)
+
+        # Set camera resolution and buffer
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         image = None
         while True:
             ret, frame = cap.read()
             if not ret:
-                print("Error: Failed to read from camera")
-                break
+                # Retry once on failure
+                ret, frame = cap.read()
+                if not ret:
+                    print("Error: Failed to read from camera")
+                    break
 
             # Display the frame
             cv2.imshow("Camera - Press SPACE to capture, ESC to exit", frame)
