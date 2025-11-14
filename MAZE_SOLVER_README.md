@@ -106,10 +106,16 @@ The system detects circles using HSV color space filtering:
   2. If no green found, searches for any saturated color with stricter area filtering
 
 ### 2. Maze Preprocessing
+Inspired by "A Maze Solver for Android" (Paranjpe & Saied, Stanford):
 - Converts image to grayscale
 - Applies Gaussian blur to reduce noise
 - Uses **Otsu's thresholding** (auto-calculated optimal threshold)
 - Auto-detects if inversion needed (checks center region)
+- **Region labeling for maze detection**:
+  - Identifies connected regions in the image
+  - Calculates perimeter of each region
+  - **Selects the 2 largest-perimeter regions as maze walls**
+  - Filters out background noise automatically
 - **Morphological operations**:
   - MORPH_CLOSE (5x5, 2 iterations) connects wall gaps
   - MORPH_OPEN (3x3, 2 iterations) removes background noise

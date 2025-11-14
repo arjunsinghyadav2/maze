@@ -175,6 +175,8 @@ def detect_circles(image, color='red'):
 def preprocess_maze(image, wall_clearance=5, debug=False):
     """
     Preprocess the maze image to extract the maze structure.
+    Uses region labeling approach from "A Maze Solver for Android" paper
+    to identify maze walls by perimeter.
 
     Args:
         image: BGR image of the maze
@@ -190,7 +192,7 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Use Otsu's thresholding (works best for this case)
+    # Use Otsu's thresholding
     _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # Check if we need to invert (walls should be black/0, paths should be white/255)
@@ -201,6 +203,59 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # If center is dark, we probably need to invert
     if center_mean < 128:
         binary = cv2.bitwise_not(binary)
+
+    # Apply median filter for salt-and-pepper noise (from paper)
+    binary = cv2.medianBlur(binary, 3)
+
+    # --- KEY INSIGHT FROM PAPER: Region labeling to find maze walls ---
+    # Invert for connected components (we want to label black regions = walls)
+    binary_for_labeling = cv2.bitwise_not(binary)
+
+    # Find connected components
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        binary_for_labeling, connectivity=8
+    )
+
+    # Calculate perimeter for each region (excluding background label 0)
+    regions = []
+    for label in range(1, num_labels):
+        # Create mask for this region
+        region_mask = (labels == label).astype(np.uint8) * 255
+
+        # Find contours to calculate perimeter
+        contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+        if contours:
+            perimeter = cv2.arcLength(contours[0], True)
+            area = stats[label, cv2.CC_STAT_AREA]
+            regions.append({
+                'label': label,
+                'perimeter': perimeter,
+                'area': area,
+                'mask': region_mask
+            })
+
+    # Sort regions by perimeter (descending) - maze walls have large perimeters
+    regions.sort(key=lambda x: x['perimeter'], reverse=True)
+
+    # For simply-connected mazes, the two largest-perimeter regions are the walls
+    # Create binary with only the two wall regions
+    if len(regions) >= 2:
+        maze_mask = np.zeros_like(binary)
+        # Keep the top 2 regions by perimeter as the maze walls
+        for region in regions[:2]:
+            maze_mask = cv2.bitwise_or(maze_mask, region['mask'])
+
+        # Invert back (walls should be black)
+        binary = cv2.bitwise_not(maze_mask)
+
+        if debug:
+            print(f"  Found {len(regions)} regions")
+            print(f"  Top 2 regions by perimeter:")
+            for i, region in enumerate(regions[:2]):
+                print(f"    Region {i+1}: perimeter={region['perimeter']:.0f}, area={region['area']}")
+    else:
+        print(f"  Warning: Only found {len(regions)} regions, expected 2 maze walls")
 
     # Close gaps in walls with morphological closing
     kernel_closing = np.ones((5, 5), np.uint8)
@@ -253,6 +308,7 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         print("\nMaze preprocessing debug:")
         print(f"  Using Otsu's thresholding (auto-calculated threshold)")
         print(f"  Center region mean brightness: {center_mean:.1f}")
+        print(f"  Region labeling: Identified maze walls by largest perimeters")
         print(f"  Morphological operations applied:")
         print(f"    - MORPH_CLOSE (5x5, 2 iterations) to connect wall gaps")
         print(f"    - MORPH_OPEN (3x3, 2 iterations) to remove background noise")
