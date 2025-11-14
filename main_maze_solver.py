@@ -230,7 +230,14 @@ def main():
     cv2.imshow("Maze Solution", path_vis)
 
     # Save visualization
-    output_path = image_path.replace('.', '_solution.')
+    if image_path:
+        output_path = image_path.replace('.', '_solution.')
+    else:
+        # Generate filename with timestamp for camera captures
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = f"maze_solution_{timestamp}.png"
+
     cv2.imwrite(output_path, path_vis)
     print(f"\n✓ Solution visualization saved to: {output_path}")
 
