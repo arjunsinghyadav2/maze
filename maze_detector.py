@@ -50,8 +50,8 @@ def detect_red_circle(image):
 
 def detect_other_circle(image, red_pos, min_distance=50, min_area=100):
     """
-    Detect the other circle (non-red) in the image by finding colored regions.
-    Prioritizes green circles (broad range) to avoid detecting noise.
+    Detect the other circle (non-red) by finding all circles and picking
+    the one with the highest green content.
 
     Args:
         image: BGR image
@@ -64,27 +64,34 @@ def detect_other_circle(image, red_pos, min_distance=50, min_area=100):
     """
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    # First, try to find a green circle specifically (broad range)
-    # This helps avoid detecting small noisy circles outside the maze
-    lower_green = np.array([30, 40, 40])  # Broad green range
-    upper_green = np.array([90, 255, 255])
-    green_mask = cv2.inRange(hsv, lower_green, upper_green)
+    # Find ALL saturated colored regions (potential circles)
+    lower_color = np.array([0, 50, 50])
+    upper_color = np.array([180, 255, 255])
+    color_mask = cv2.inRange(hsv, lower_color, upper_color)
 
     # Remove the red circle area
     if red_pos:
-        cv2.circle(green_mask, red_pos, 30, 0, -1)
+        cv2.circle(color_mask, red_pos, 30, 0, -1)
 
-    # Apply morphological operations
+    # Apply morphological operations to clean up
     kernel = np.ones((5, 5), np.uint8)
-    green_mask = cv2.morphologyEx(green_mask, cv2.MORPH_OPEN, kernel)
-    green_mask = cv2.morphologyEx(green_mask, cv2.MORPH_CLOSE, kernel)
+    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_OPEN, kernel)
+    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_CLOSE, kernel)
 
-    # Find green contours
-    green_contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Find all contours
+    contours, _ = cv2.findContours(color_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Check for valid green circles
-    green_candidates = []
-    for contour in green_contours:
+    if not contours:
+        return None
+
+    # Define green range for measuring green content
+    lower_green = np.array([30, 40, 40])
+    upper_green = np.array([90, 255, 255])
+    green_mask = cv2.inRange(hsv, lower_green, upper_green)
+
+    # Evaluate each contour for green content
+    candidates = []
+    for contour in contours:
         area = cv2.contourArea(contour)
         if area < min_area:
             continue
@@ -102,62 +109,39 @@ def detect_other_circle(image, red_pos, min_distance=50, min_area=100):
             if dist < min_distance:
                 continue
 
-        green_candidates.append((area, (cx, cy)))
+        # Calculate green content in this contour
+        # Create a mask for this specific contour
+        contour_mask = np.zeros(color_mask.shape, dtype=np.uint8)
+        cv2.drawContours(contour_mask, [contour], -1, 255, -1)
 
-    # If we found green circle(s), return the largest one
-    if green_candidates:
-        green_candidates.sort(key=lambda x: x[0], reverse=True)
-        return green_candidates[0][1]
+        # Count green pixels within this contour
+        green_in_contour = cv2.bitwise_and(green_mask, contour_mask)
+        green_pixel_count = np.sum(green_in_contour > 0)
 
-    # If no green circle found, fall back to any saturated color
-    # But use stricter area threshold to avoid noise
-    lower_color = np.array([0, 50, 50])
-    upper_color = np.array([180, 255, 255])
-    color_mask = cv2.inRange(hsv, lower_color, upper_color)
+        # Calculate green percentage in this contour
+        green_percentage = green_pixel_count / area if area > 0 else 0
 
-    # Remove the red circle area
-    if red_pos:
-        cv2.circle(color_mask, red_pos, 30, 0, -1)
+        candidates.append({
+            'position': (cx, cy),
+            'area': area,
+            'green_pixels': green_pixel_count,
+            'green_percentage': green_percentage
+        })
 
-    # Apply morphological operations
-    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_OPEN, kernel)
-    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_CLOSE, kernel)
-
-    # Find contours
-    contours, _ = cv2.findContours(color_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    if not contours:
+    if not candidates:
         return None
 
-    # Find the largest contour that's far enough from the red circle
-    # Use stricter area threshold for fallback (3x larger)
-    valid_contours = []
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if area < min_area * 3:  # Stricter threshold for non-green circles
-            continue
+    # Sort by green pixel count (highest green content first)
+    candidates.sort(key=lambda x: x['green_pixels'], reverse=True)
 
-        M = cv2.moments(contour)
-        if M["m00"] == 0:
-            continue
+    # Debug output
+    print(f"  Found {len(candidates)} circle candidates:")
+    for i, c in enumerate(candidates[:3]):  # Show top 3
+        print(f"    {i+1}. Position: {c['position']}, Area: {c['area']:.0f}, "
+              f"Green pixels: {c['green_pixels']}, Green %: {c['green_percentage']*100:.1f}%")
 
-        cx = int(M["m10"] / M["m00"])
-        cy = int(M["m01"] / M["m00"])
-
-        # Check distance from red circle
-        if red_pos:
-            dist = np.sqrt((cx - red_pos[0])**2 + (cy - red_pos[1])**2)
-            if dist < min_distance:
-                continue
-
-        valid_contours.append((area, (cx, cy)))
-
-    if not valid_contours:
-        return None
-
-    # Return the largest valid contour
-    valid_contours.sort(key=lambda x: x[0], reverse=True)
-    return valid_contours[0][1]
+    # Return the circle with the most green content
+    return candidates[0]['position']
 
 
 def detect_circles(image, color='red'):
