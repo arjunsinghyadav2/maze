@@ -191,11 +191,18 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Canny edge detection
-    median = np.median(blurred)
-    lower = int(max(0, 0.5 * median))
-    upper = int(min(255, 1.5 * median))
-    edges = cv2.Canny(blurred, lower, upper)
+    # Sobel edge detection (X and Y gradients)
+    sobelx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=3)
+    sobely = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)
+
+    # Compute gradient magnitude
+    sobel_magnitude = np.sqrt(sobelx**2 + sobely**2)
+
+    # Normalize to 0-255 range
+    sobel_normalized = np.uint8(sobel_magnitude / sobel_magnitude.max() * 255)
+
+    # Threshold to get binary edges
+    _, edges = cv2.threshold(sobel_normalized, 50, 255, cv2.THRESH_BINARY)
 
     # Connect broken edges
     kernel = np.ones((3, 3), np.uint8)
@@ -224,15 +231,16 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         cv2.imshow("1. Original", image)
         cv2.imshow("2. Grayscale", gray)
         cv2.imshow("3. Blurred", blurred)
-        cv2.imshow("4. Canny Edges", edges)
-        cv2.imshow("5. Edges Closed", edges_closed)
-        cv2.imshow("6. Edges Closed & Dilated (WALLS=WHITE) ***PERFECT***", walls_white)
-        cv2.imshow("7. Inverted (WALLS=0, PATHS=255)", binary)
+        cv2.imshow("4. Sobel Edges", sobel_normalized)
+        cv2.imshow("5. Sobel Thresholded", edges)
+        cv2.imshow("6. Edges Closed", edges_closed)
+        cv2.imshow("7. Edges Closed & Dilated (WALLS=WHITE) ***PERFECT***", walls_white)
+        cv2.imshow("8. Inverted (WALLS=0, PATHS=255)", binary)
 
         print("\n" + "="*60)
-        print("MAZE PREPROCESSING PIPELINE")
+        print("MAZE PREPROCESSING PIPELINE - SOBEL METHOD")
         print("="*60)
-        print(f"\nStage 6 (Edges Closed & Dilated) is the perfect wall detection")
+        print(f"\nStage 7 (Edges Closed & Dilated) is the perfect wall detection")
         print(f"  White pixels (walls): {np.sum(walls_white == 255)}")
         print(f"  Black pixels (paths): {np.sum(walls_white == 0)}")
         print(f"\nFinal binary maze (for solver):")
