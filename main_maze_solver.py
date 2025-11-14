@@ -200,22 +200,35 @@ def main():
 
     # Preprocess the maze
     print(f"\nPreprocessing maze (wall clearance: {wall_clearance}px)...")
-    print(f"Circle removal: Localized within 45px of start and goal positions")
+    print(f"Circle removal: Localized within 110px of start and goal positions")
     if debug_mode:
         print("Debug mode: Showing detailed preprocessing steps...")
     binary_maze = preprocess_maze(image, wall_clearance=wall_clearance, debug=debug_mode,
-                                   start_pos=start_pos, goal_pos=goal_pos, circle_radius=45)
+                                   start_pos=start_pos, goal_pos=goal_pos, circle_radius=110)
 
     # Save the binary maze for debugging
     if image_path:
         binary_maze_path = image_path.replace('.', '_binary_maze.')
+        binary_with_circles_path = image_path.replace('.', '_binary_with_circles.')
     else:
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         binary_maze_path = f"binary_maze_{timestamp}.png"
+        binary_with_circles_path = f"binary_with_circles_{timestamp}.png"
 
     cv2.imwrite(binary_maze_path, binary_maze)
     print(f"✓ Binary maze saved to: {binary_maze_path}")
+
+    # Create visualization with start and goal circles on binary image
+    binary_vis = cv2.cvtColor(binary_maze, cv2.COLOR_GRAY2BGR)
+    cv2.circle(binary_vis, start_pos, 20, (0, 0, 255), 3)  # Red circle at start
+    cv2.putText(binary_vis, "START", (start_pos[0] - 30, start_pos[1] - 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    cv2.circle(binary_vis, goal_pos, 20, (0, 255, 0), 3)  # Green circle at goal
+    cv2.putText(binary_vis, "GOAL", (goal_pos[0] - 25, goal_pos[1] - 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    cv2.imwrite(binary_with_circles_path, binary_vis)
+    print(f"✓ Binary maze with circles saved to: {binary_with_circles_path}")
 
     if not debug_mode:
         cv2.imshow("Preprocessed Maze", binary_maze)
