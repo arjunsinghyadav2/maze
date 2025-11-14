@@ -62,8 +62,9 @@ def move_robot_along_path(device, M, path, z_height=-45):
 
 def main():
     # Parse command line arguments
-    if len(sys.argv) < 2:
-        print("Usage: python main_maze_solver.py <maze_image_path> [OPTIONS]")
+    if len(sys.argv) < 1:
+        print("Usage: python main_maze_solver.py [maze_image_path] [OPTIONS]")
+        print("\nIf no image path provided, captures from camera (device 0)")
         print("\nOptions:")
         print("  --no-robot          : Run without connecting to robot (visualization only)")
         print("  --step-size N       : Simplify path by taking every Nth point (default: 5)")
@@ -72,7 +73,11 @@ def main():
         print("  --debug             : Show detailed debug images at each processing step")
         sys.exit(1)
 
-    image_path = sys.argv[1]
+    # Check if first argument is an image path or a flag
+    image_path = None
+    if len(sys.argv) > 1 and not sys.argv[1].startswith('--'):
+        image_path = sys.argv[1]
+
     use_robot = "--no-robot" not in sys.argv
     debug_mode = "--debug" in sys.argv
 
@@ -97,15 +102,54 @@ def main():
         if idx + 1 < len(sys.argv):
             wall_clearance = int(sys.argv[idx + 1])
 
-    # Load the maze image
-    print(f"Loading maze image: {image_path}")
-    image = cv2.imread(image_path)
+    # Load or capture the maze image
+    if image_path:
+        print(f"Loading maze image: {image_path}")
+        image = cv2.imread(image_path)
 
-    if image is None:
-        print(f"Error: Could not load image from {image_path}")
-        sys.exit(1)
+        if image is None:
+            print(f"Error: Could not load image from {image_path}")
+            sys.exit(1)
 
-    print(f"Image loaded: {image.shape[1]}x{image.shape[0]} pixels")
+        print(f"Image loaded: {image.shape[1]}x{image.shape[0]} pixels")
+    else:
+        # Capture from camera
+        print("No image path provided - capturing from camera (device 0)...")
+        print("Position your maze in front of the camera")
+        print("Press SPACE to capture, ESC to exit")
+
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            print("Error: Could not open camera device 0")
+            sys.exit(1)
+
+        image = None
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: Failed to read from camera")
+                break
+
+            # Display the frame
+            cv2.imshow("Camera - Press SPACE to capture, ESC to exit", frame)
+
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27:  # ESC
+                print("Capture cancelled")
+                cap.release()
+                cv2.destroyAllWindows()
+                sys.exit(0)
+            elif key == 32:  # SPACE
+                image = frame.copy()
+                print(f"Image captured: {image.shape[1]}x{image.shape[0]} pixels")
+                break
+
+        cap.release()
+        cv2.destroyAllWindows()
+
+        if image is None:
+            print("Error: No image captured")
+            sys.exit(1)
 
     # Detect red circle first
     print("\nDetecting circles...")

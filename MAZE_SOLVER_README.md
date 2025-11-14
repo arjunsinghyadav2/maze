@@ -39,12 +39,21 @@ This creates a simple maze image with red and green circles.
 
 ### 2. Run the Maze Solver (Visualization Only)
 
+**Option A: With image file**
 ```bash
 python main_maze_solver.py sample_maze.png --no-robot
 ```
 
+**Option B: Capture from camera**
+```bash
+python main_maze_solver.py --no-robot
+```
+- Opens camera feed
+- Press SPACE to capture maze image
+- Press ESC to cancel
+
 This will:
-- Detect the red and green circles
+- Detect the red and other circles
 - Ask which circle is the start
 - Solve the maze
 - Display the solution
@@ -52,8 +61,14 @@ This will:
 
 ### 3. Run with Dobot Robot
 
+**With image file:**
 ```bash
 python main_maze_solver.py sample_maze.png
+```
+
+**With camera capture:**
+```bash
+python main_maze_solver.py
 ```
 
 This will perform all steps above and then move the Dobot robot along the path.
@@ -61,8 +76,10 @@ This will perform all steps above and then move the Dobot robot along the path.
 ## Usage Options
 
 ```bash
-python main_maze_solver.py <maze_image_path> [OPTIONS]
+python main_maze_solver.py [maze_image_path] [OPTIONS]
 ```
+
+**Note:** If no image path is provided, the program captures from camera (device 0)
 
 ### Options:
 - `--no-robot` : Run without connecting to robot (visualization only)
@@ -74,11 +91,17 @@ python main_maze_solver.py <maze_image_path> [OPTIONS]
 ### Examples:
 
 ```bash
-# Solve maze with default settings
+# Solve maze from image file (with robot)
 python main_maze_solver.py my_maze.png
 
-# Visualization only (no robot)
+# Capture from camera and solve (with robot)
+python main_maze_solver.py
+
+# Visualization only from image (no robot)
 python main_maze_solver.py my_maze.png --no-robot
+
+# Visualization only from camera (no robot)
+python main_maze_solver.py --no-robot
 
 # Use finer path resolution
 python main_maze_solver.py my_maze.png --step-size 3
@@ -94,6 +117,9 @@ python main_maze_solver.py my_maze.png --wall-clearance 3
 
 # Debug mode - see maze processing steps
 python main_maze_solver.py my_maze.png --no-robot --debug
+
+# Capture from camera with debug mode
+python main_maze_solver.py --no-robot --debug
 ```
 
 ## How It Works
