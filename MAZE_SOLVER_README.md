@@ -106,22 +106,21 @@ The system detects circles using HSV color space filtering:
   2. If no green found, searches for any saturated color with stricter area filtering
 
 ### 2. Maze Preprocessing
-Inspired by "A Maze Solver for Android" (Paranjpe & Saied, Stanford):
+Uses **edge detection** approach for accurate wall identification:
 - Converts image to grayscale
 - Applies Gaussian blur to reduce noise
-- Uses **Otsu's thresholding** (auto-calculated optimal threshold)
-- Auto-detects if inversion needed (checks center region)
-- **Region labeling for maze detection**:
-  - Identifies connected regions in the image
-  - Calculates perimeter of each region
-  - **Selects the 2 largest-perimeter regions as maze walls**
-  - Filters out background noise automatically
+- **Canny edge detection** to find wall boundaries:
+  - Auto-calculates thresholds based on image median intensity
+  - Detects strong edges (wall boundaries)
+  - Produces thin, connected edge lines
 - **Morphological operations**:
-  - MORPH_CLOSE (5x5, 2 iterations) connects wall gaps
-  - MORPH_OPEN (3x3, 2 iterations) removes background noise
+  - MORPH_CLOSE (3x3, 2x) connects broken edges
+  - Dilate edges (3x3, 2x) to thicken walls
+  - MORPH_CLOSE (5x5) fills small holes in paths
+  - MORPH_OPEN (3x3) removes noise
 - Removes colored circle areas to avoid interference
 - **Adds wall clearance** by dilating walls to create a safety margin
-- Result: Binary image (0 = wall, 255 = path) with clean solid walls
+- Result: Binary image (0 = wall, 255 = path) with precise wall boundaries
 
 ### 3. Pathfinding (A* Algorithm)
 - Uses A* search algorithm with Manhattan distance heuristic
@@ -186,15 +185,18 @@ python main_maze_solver.py maze.png --no-robot --debug
 This shows you processing stages:
 1. Original image
 2. Grayscale conversion
-3. Otsu threshold with morphological operations (walls should be SOLID BLACK, paths WHITE)
-4. Color mask (circles removed)
-5. Final with clearance
+3. Blurred image
+4. Canny edges (edge boundaries detected)
+5. Edges closed & dilated (walls as white lines)
+6. Inverted binary (0=walls BLACK, 255=paths WHITE)
+7. Color mask (circles removed)
+8. Final with clearance
 
-**If walls aren't detected properly (stage 3):**
-- Ensure maze has good contrast (dark walls, light paths or vice versa)
-- Walls should be solid black or very dark
-- Paths should be white or very light
-- Avoid gradients or shadows
+**If walls aren't detected properly (stages 4-6):**
+- Check stage 4 (Canny Edges) - should show clean edge lines
+- Ensure maze has good contrast for edge detection
+- Walls should have clear boundaries
+- Stage 6 should show walls as solid BLACK, paths as WHITE
 
 **If path is blocked by clearance (stage 5):**
 - Try reducing wall clearance: `--wall-clearance 2` or `--wall-clearance 0`

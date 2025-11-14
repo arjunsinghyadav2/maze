@@ -174,9 +174,7 @@ def detect_circles(image, color='red'):
 
 def preprocess_maze(image, wall_clearance=5, debug=False):
     """
-    Preprocess the maze image to extract the maze structure.
-    Uses region labeling approach from "A Maze Solver for Android" paper
-    to identify maze walls by perimeter.
+    Preprocess the maze image to extract the maze structure using edge detection.
 
     Args:
         image: BGR image of the maze
@@ -189,81 +187,27 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Apply Gaussian blur to reduce noise
+    # Apply Gaussian blur to reduce noise before edge detection
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Use Otsu's thresholding
-    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Use Canny edge detection to find wall boundaries
+    # Auto-calculate thresholds based on median
+    median_intensity = np.median(blurred)
+    lower_threshold = int(max(0, 0.5 * median_intensity))
+    upper_threshold = int(min(255, 1.5 * median_intensity))
 
-    # Check if we need to invert (walls should be black/0, paths should be white/255)
-    h, w = binary.shape
-    center_region = binary[h//4:3*h//4, w//4:3*w//4]
-    center_mean = np.mean(center_region)
+    edges = cv2.Canny(blurred, lower_threshold, upper_threshold)
 
-    # If center is dark, we probably need to invert
-    if center_mean < 128:
-        binary = cv2.bitwise_not(binary)
+    # Connect broken edges using morphological closing
+    kernel_close = np.ones((3, 3), np.uint8)
+    edges_closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel_close, iterations=2)
 
-    # Apply median filter for salt-and-pepper noise (from paper)
-    binary = cv2.medianBlur(binary, 3)
+    # Dilate edges to make walls thicker (edges are thin lines)
+    kernel_dilate = np.ones((3, 3), np.uint8)
+    walls = cv2.dilate(edges_closed, kernel_dilate, iterations=2)
 
-    # --- KEY INSIGHT FROM PAPER: Region labeling to find maze walls ---
-    # Invert for connected components (we want to label black regions = walls)
-    binary_for_labeling = cv2.bitwise_not(binary)
-
-    # Find connected components
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
-        binary_for_labeling, connectivity=8
-    )
-
-    # Calculate perimeter for each region (excluding background label 0)
-    regions = []
-    for label in range(1, num_labels):
-        # Create mask for this region
-        region_mask = (labels == label).astype(np.uint8) * 255
-
-        # Find contours to calculate perimeter
-        contours, _ = cv2.findContours(region_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-        if contours:
-            perimeter = cv2.arcLength(contours[0], True)
-            area = stats[label, cv2.CC_STAT_AREA]
-            regions.append({
-                'label': label,
-                'perimeter': perimeter,
-                'area': area,
-                'mask': region_mask
-            })
-
-    # Sort regions by perimeter (descending) - maze walls have large perimeters
-    regions.sort(key=lambda x: x['perimeter'], reverse=True)
-
-    # For simply-connected mazes, the two largest-perimeter regions are the walls
-    # Create binary with only the two wall regions
-    if len(regions) >= 2:
-        maze_mask = np.zeros_like(binary)
-        # Keep the top 2 regions by perimeter as the maze walls
-        for region in regions[:2]:
-            maze_mask = cv2.bitwise_or(maze_mask, region['mask'])
-
-        # Invert back (walls should be black)
-        binary = cv2.bitwise_not(maze_mask)
-
-        if debug:
-            print(f"  Found {len(regions)} regions")
-            print(f"  Top 2 regions by perimeter:")
-            for i, region in enumerate(regions[:2]):
-                print(f"    Region {i+1}: perimeter={region['perimeter']:.0f}, area={region['area']}")
-    else:
-        print(f"  Warning: Only found {len(regions)} regions, expected 2 maze walls")
-
-    # Close gaps in walls with morphological closing
-    kernel_closing = np.ones((5, 5), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_closing, iterations=2)
-
-    # Remove small noise (background speckles outside maze)
-    kernel_small = np.ones((3, 3), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small, iterations=2)
+    # Create the maze: invert so walls are black (0) and paths are white (255)
+    binary = cv2.bitwise_not(walls)
 
     # Remove circles from the binary image to avoid interference
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
@@ -280,13 +224,19 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
     # Set colored areas to white (path) in the binary image
     binary[color_mask > 0] = 255
 
+    # Fill small holes in the path using morphological closing
+    kernel_fill = np.ones((5, 5), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_fill, iterations=1)
+
+    # Remove small noise
+    kernel_small = np.ones((3, 3), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small, iterations=1)
+
     # Store the binary before clearance for debugging
     binary_before_clearance = binary.copy()
 
     # Add wall clearance by dilating walls (eroding paths)
-    # This creates a safety margin so the robot doesn't bump into walls
     if wall_clearance > 0:
-        # Create a kernel for dilation
         clearance_kernel = np.ones((wall_clearance * 2 + 1, wall_clearance * 2 + 1), np.uint8)
 
         # Invert to make walls white, paths black
@@ -295,25 +245,28 @@ def preprocess_maze(image, wall_clearance=5, debug=False):
         # Dilate the walls (make them thicker)
         dilated_walls = cv2.dilate(inverted, clearance_kernel, iterations=1)
 
-        # Invert back to get the final binary maze
+        # Invert back
         binary = cv2.bitwise_not(dilated_walls)
 
     if debug:
         cv2.imshow("1. Original", image)
         cv2.imshow("2. Grayscale", gray)
-        cv2.imshow("3. Otsu Threshold", binary_before_clearance)
-        cv2.imshow("4. Color Mask (circles)", color_mask)
+        cv2.imshow("3. Blurred", blurred)
+        cv2.imshow("4. Canny Edges", edges)
+        cv2.imshow("5. Edges Closed & Dilated (WALLS=WHITE)", walls)
+        cv2.imshow("6. Inverted (WALLS=BLACK, PATHS=WHITE)", binary_before_clearance)
+        cv2.imshow("7. Color Mask (circles)", color_mask)
         if wall_clearance > 0:
-            cv2.imshow("5. Final with Clearance", binary)
+            cv2.imshow("8. Final with Clearance", binary)
+
         print("\nMaze preprocessing debug:")
-        print(f"  Using Otsu's thresholding (auto-calculated threshold)")
-        print(f"  Center region mean brightness: {center_mean:.1f}")
-        print(f"  Region labeling: Identified maze walls by largest perimeters")
-        print(f"  Morphological operations applied:")
-        print(f"    - MORPH_CLOSE (5x5, 2 iterations) to connect wall gaps")
-        print(f"    - MORPH_OPEN (3x3, 2 iterations) to remove background noise")
-        print(f"  Final: Black pixels (walls): {np.sum(binary == 0)}")
-        print(f"  Final: White pixels (paths): {np.sum(binary == 255)}")
+        print(f"  Edge detection:")
+        print(f"    Canny thresholds: lower={lower_threshold}, upper={upper_threshold}")
+        print(f"    Edges found: {np.sum(edges > 0)} pixels")
+        print(f"  Binary maze map (0=wall, 255=path):")
+        print(f"    Black pixels (walls): {np.sum(binary == 0)}")
+        print(f"    White pixels (paths): {np.sum(binary == 255)}")
+        print(f"  Wall percentage: {100 * np.sum(binary == 0) / binary.size:.1f}%")
         print("\nPress any key to continue...")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
