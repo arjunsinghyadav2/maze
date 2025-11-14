@@ -50,15 +50,24 @@ def manhattan_distance(pos1, pos2):
     return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
 
-def a_star_search(maze, start, goal, verbose=False):
+def euclidean_distance(pos1, pos2):
+    """Calculate Euclidean distance between two points."""
+    return np.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
+
+
+def a_star_search(maze, start, goal, verbose=False, goal_radius=100):
     """
     A* pathfinding algorithm to find path from start to goal.
+
+    If goal is blocked, finds path to within goal_radius pixels and
+    adds a straight line to the actual goal.
 
     Args:
         maze: Binary maze image (0 = wall, 255 = path)
         start: (x, y) starting position
         goal: (x, y) goal position
         verbose: If True, print debug information
+        goal_radius: Distance within which we consider goal reached (default: 100)
 
     Returns:
         List of (x, y) positions from start to goal, or None if no path
@@ -67,13 +76,15 @@ def a_star_search(maze, start, goal, verbose=False):
         print(f"  ✗ Start position {start} is not valid (on wall or out of bounds)!")
         return None
 
-    if not is_valid_position(maze, goal):
-        print(f"  ✗ Goal position {goal} is not valid (on wall or out of bounds)!")
-        return None
+    # Check if goal is valid - if not, we'll path to within goal_radius
+    goal_is_valid = is_valid_position(maze, goal)
 
     if verbose:
         print(f"  ✓ Start position {start} is valid")
-        print(f"  ✓ Goal position {goal} is valid")
+        if goal_is_valid:
+            print(f"  ✓ Goal position {goal} is valid")
+        else:
+            print(f"  ⚠ Goal position {goal} is blocked - will path to within {goal_radius}px")
         print(f"  Manhattan distance: {manhattan_distance(start, goal)}")
 
     # Priority queue: (f_score, counter, position)
@@ -96,6 +107,8 @@ def a_star_search(maze, start, goal, verbose=False):
 
     # Track explored positions
     explored = 0
+    closest_point = start
+    closest_distance = euclidean_distance(start, goal)
 
     while open_set:
         # Get position with lowest f_score
@@ -103,8 +116,14 @@ def a_star_search(maze, start, goal, verbose=False):
         open_set_hash.discard(current)
         explored += 1
 
-        # Check if we reached the goal
-        if current == goal:
+        # Track closest point to goal
+        dist_to_goal = euclidean_distance(current, goal)
+        if dist_to_goal < closest_distance:
+            closest_distance = dist_to_goal
+            closest_point = current
+
+        # Check if we reached the exact goal OR within goal_radius
+        if current == goal or dist_to_goal <= goal_radius:
             # Reconstruct path
             path = []
             while current in came_from:
@@ -112,6 +131,27 @@ def a_star_search(maze, start, goal, verbose=False):
                 current = came_from[current]
             path.append(start)
             path.reverse()
+
+            # If we didn't reach exact goal, add straight line to goal
+            if path[-1] != goal:
+                if verbose:
+                    print(f"  ✓ Reached within {goal_radius}px of goal (distance: {dist_to_goal:.1f}px)")
+                    print(f"  Adding straight line from {path[-1]} to {goal}")
+                # Add intermediate points along straight line for smoother visualization
+                last_point = path[-1]
+                dx = goal[0] - last_point[0]
+                dy = goal[1] - last_point[1]
+                num_steps = max(abs(dx), abs(dy))
+                if num_steps > 0:
+                    for i in range(1, num_steps + 1):
+                        t = i / num_steps
+                        x = int(last_point[0] + dx * t)
+                        y = int(last_point[1] + dy * t)
+                        path.append((x, y))
+                # Ensure goal is the final point
+                if path[-1] != goal:
+                    path.append(goal)
+
             if verbose:
                 print(f"  ✓ Path found! Explored {explored} positions")
             return path
@@ -139,7 +179,7 @@ def a_star_search(maze, start, goal, verbose=False):
     # No path found
     if verbose:
         print(f"  ✗ No path found after exploring {explored} positions")
-        print(f"  Positions in g_score: {len(g_score)}")
+        print(f"  Closest point reached: {closest_point} (distance: {closest_distance:.1f}px)")
     return None
 
 

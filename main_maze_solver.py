@@ -233,9 +233,10 @@ def main():
     if binary_maze[goal_pos[1], goal_pos[0]] == 0:
         print("  ⚠ WARNING: Goal position is on a wall (black pixel)!")
 
-    # Solve the maze
-    print("\nSolving maze with A* algorithm...")
-    path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True)
+    # Solve the maze with goal radius to handle blocked goal positions
+    goal_radius = 100  # If we get within 100px of goal, connect with straight line
+    print(f"\nSolving maze with A* algorithm (goal radius: {goal_radius}px)...")
+    path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True, goal_radius=goal_radius)
 
     if path is None:
         print("Error: No path found through the maze!")
