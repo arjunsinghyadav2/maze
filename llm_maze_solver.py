@@ -8,6 +8,7 @@ implement the A* algorithm on the given maze data.
 import anthropic
 import cv2
 import numpy as np
+import base64
 import os
 import json
 from typing import List, Tuple, Optional
