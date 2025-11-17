@@ -19,6 +19,7 @@ import pydobot
 
 from maze_detector import detect_red_circle, detect_other_circle, preprocess_maze, visualize_detection
 from maze_solver import a_star_search, simplify_path, visualize_path
+from llm_maze_solver import solve_maze_with_llm
 from camera_utilities import apply_affine, apply_homography
 from robot_utilities import move_to_home, move_to_specific_position, get_current_pose
 
@@ -67,10 +68,14 @@ def main():
         print("\nIf no image path provided, captures from camera (device 0)")
         print("\nOptions:")
         print("  --no-robot          : Run without connecting to robot (visualization only)")
+        print("  --solver METHOD     : Pathfinding method: 'astar' or 'llm' (default: astar)")
         print("  --step-size N       : Simplify path by taking every Nth point (default: 5)")
         print("  --z-height Z        : Z-coordinate for robot movement (default: -45)")
         print("  --wall-clearance N  : Safety margin around walls in pixels (default: 5)")
         print("  --debug             : Show detailed debug images at each processing step")
+        print("\nLLM Solver:")
+        print("  Requires ANTHROPIC_API_KEY environment variable")
+        print("  Uses Claude Sonnet 4.5 for visual reasoning")
         sys.exit(1)
 
     # Check if first argument is an image path or a flag
@@ -80,6 +85,16 @@ def main():
 
     use_robot = "--no-robot" not in sys.argv
     debug_mode = "--debug" in sys.argv
+
+    # Parse solver method
+    solver_method = "astar"  # default
+    if "--solver" in sys.argv:
+        idx = sys.argv.index("--solver")
+        if idx + 1 < len(sys.argv):
+            solver_method = sys.argv[idx + 1].lower()
+            if solver_method not in ["astar", "llm"]:
+                print(f"Error: Invalid solver method '{solver_method}'. Use 'astar' or 'llm'")
+                sys.exit(1)
 
     # Parse step size
     step_size = 85
@@ -258,10 +273,19 @@ def main():
     if binary_maze[goal_pos[1], goal_pos[0]] == 0:
         print("  ⚠ WARNING: Goal position is on a wall (black pixel)!")
 
-    # Solve the maze with goal radius to handle blocked goal positions
-    goal_radius = 10  # If we get within 100px of goal, connect with straight line
-    print(f"\nSolving maze with A* algorithm (goal radius: {goal_radius}px)...")
-    path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True, goal_radius=goal_radius)
+    # Solve the maze using selected method
+    if solver_method == "astar":
+        # Use A* algorithm with goal radius
+        goal_radius = 10  # Optimal value - if we get within 10px of goal, connect with straight line
+        print(f"\nSolving maze with A* algorithm (goal radius: {goal_radius}px)...")
+        path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True, goal_radius=goal_radius)
+    elif solver_method == "llm":
+        # Use Claude Sonnet 4.5 LLM
+        print(f"\nSolving maze with Claude Sonnet 4.5 LLM...")
+        path = solve_maze_with_llm(binary_maze, start_pos, goal_pos, verbose=True)
+    else:
+        print(f"Error: Unknown solver method '{solver_method}'")
+        sys.exit(1)
 
     if path is None:
         print("Error: No path found through the maze!")
@@ -276,6 +300,7 @@ def main():
         sys.exit(1)
 
     print(f"✓ Path found! Length: {len(path)} pixels")
+    print(f"  Solver used: {solver_method.upper()}")
 
     # Simplify the path
     print(f"\nSimplifying path (taking every {step_size}th point)...")
