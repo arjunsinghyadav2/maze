@@ -1,14 +1,13 @@
 """
 LLM-based Maze Solver using Claude Sonnet 4.5
 
-This module provides an alternative to A* pathfinding by using Claude's
-vision and reasoning capabilities to solve the maze.
+This module provides an alternative to A* pathfinding by asking Claude to
+implement the A* algorithm on the given maze data.
 """
 
 import anthropic
 import cv2
 import numpy as np
-import base64
 import os
 import json
 from typing import List, Tuple, Optional
@@ -78,73 +77,74 @@ def create_annotated_maze_image(binary_maze: np.ndarray, start_pos: Tuple[int, i
     return annotated
 
 
-def create_maze_solving_prompt(start_pos: Tuple[int, int], goal_pos: Tuple[int, int],
-                                maze_shape: Tuple[int, int]) -> str:
+def maze_to_simple_format(binary_maze: np.ndarray, sample_rate: int = 1) -> List[List[int]]:
     """
-    Create a detailed prompt for Claude to solve the maze.
+    Convert binary maze to a simple 2D list format for the LLM.
 
     Args:
+        binary_maze: Binary maze (0=wall, 255=path)
+        sample_rate: Sample every Nth pixel to reduce size (default=1, no sampling)
+
+    Returns:
+        2D list where 0=wall, 1=path
+    """
+    # Sample the maze to reduce size if needed
+    if sample_rate > 1:
+        sampled = binary_maze[::sample_rate, ::sample_rate]
+    else:
+        sampled = binary_maze
+
+    # Convert to 0/1 format (0=wall, 1=path)
+    maze_grid = (sampled > 128).astype(int).tolist()
+    return maze_grid
+
+
+def create_astar_prompt(maze_grid: List[List[int]], start_pos: Tuple[int, int],
+                        goal_pos: Tuple[int, int]) -> str:
+    """
+    Create a prompt asking Claude to implement A* algorithm on the maze.
+
+    Args:
+        maze_grid: 2D list where 0=wall, 1=path
         start_pos: (x, y) start position
         goal_pos: (x, y) goal position
-        maze_shape: (height, width) of the maze
 
     Returns:
         Prompt string
     """
-    height, width = maze_shape
+    height = len(maze_grid)
+    width = len(maze_grid[0]) if height > 0 else 0
 
-    prompt = f"""You are solving a maze puzzle. Study the image carefully to find a VALID path through the maze corridors.
+    # Convert maze to compact string representation for the prompt
+    maze_str = json.dumps(maze_grid)
 
-## CRITICAL RULES - READ CAREFULLY:
+    prompt = f"""You are given a binary maze represented as a 2D array where:
+- 0 = WALL (cannot pass through)
+- 1 = PATH (can pass through)
 
-**THIS IS A MAZE - YOU CANNOT GO IN A STRAIGHT LINE!**
+**MAZE DATA:**
+- Size: {width} x {height} (width x height)
+- Coordinate system: maze[y][x] where (0,0) is top-left
+- Start position: ({start_pos[0]}, {start_pos[1]})
+- Goal position: ({goal_pos[0]}, {goal_pos[1]})
 
-The maze has:
-- **BLACK pixels (0)** = SOLID WALLS - You CANNOT pass through these!
-- **WHITE pixels (255)** = OPEN CORRIDORS - You MUST stay in these areas!
+**THE MAZE ARRAY:**
+```json
+{maze_str}
+```
 
-**YOU MUST FOLLOW THE WHITE CORRIDORS. DO NOT CUT THROUGH WALLS.**
+**YOUR TASK:**
+Implement the A* pathfinding algorithm to find the shortest path from start to goal.
 
-## IMAGE DETAILS:
-- Size: {width}x{height} pixels
-- Coordinate system: (0,0) is TOP-LEFT, x goes RIGHT, y goes DOWN
-- Wall thickness: approximately 3-5 pixels (stay in center of corridors)
-- Grid lines shown every 50 pixels for reference
+**A* ALGORITHM REQUIREMENTS:**
+1. Use Manhattan or Euclidean distance as the heuristic
+2. Only move to cells where maze[y][x] == 1 (path cells)
+3. Use 8-directional movement (up, down, left, right, and diagonals)
+4. The path must stay within bounds: 0 <= x < {width}, 0 <= y < {height}
+5. Each step should move to an adjacent cell (8-connected neighbors)
 
-## START AND GOAL:
-- **START (GREEN circle)**: pixel ({start_pos[0]}, {start_pos[1]})
-- **GOAL (RED circle)**: pixel ({goal_pos[0]}, {goal_pos[1]})
-
-## YOUR TASK:
-Trace a path through the WHITE corridors from START to GOAL.
-
-**STEP-BY-STEP APPROACH:**
-1. **Look at the maze image** - identify the black walls and white corridors
-2. **Find the START (green circle)** - this is where you begin
-3. **Find the GOAL (red circle)** - this is your destination
-4. **Trace the white corridors** from start to goal - like following a road on a map
-5. **Avoid all black areas** - these are walls you cannot pass through
-6. **Stay in the CENTER of white corridors** - don't hug the walls
-7. **Place waypoints every 10-20 pixels** along the corridor path
-
-## PATH REQUIREMENTS:
-✓ First waypoint = START position [{start_pos[0]}, {start_pos[1]}]
-✓ Last waypoint = GOAL position [{goal_pos[0]}, {goal_pos[1]}]
-✓ ALL waypoints between must be in WHITE areas (never black!)
-✓ Stay 3-5 pixels away from walls (in center of corridors)
-✓ Follow the natural turns and curves of the maze corridors
-✓ Waypoints spaced every 10-20 pixels for smooth movement
-✓ Total waypoints should be roughly Manhattan distance / 15
-
-## WHAT NOT TO DO:
-✗ DO NOT draw a straight line from start to goal
-✗ DO NOT cut through black wall areas
-✗ DO NOT place waypoints on or near black pixels
-✗ DO NOT take shortcuts through walls
-✗ DO NOT skip sections of the corridor
-
-## OUTPUT FORMAT:
-Return ONLY valid JSON (no other text):
+**OUTPUT FORMAT:**
+Return ONLY valid JSON with the path as an array of [x, y] coordinates:
 
 ```json
 {{
@@ -155,16 +155,18 @@ Return ONLY valid JSON (no other text):
     ...
     [{goal_pos[0]}, {goal_pos[1]}]
   ],
-  "reasoning": "Brief description of the route you traced through the corridors"
+  "algorithm": "Brief description of how A* found this path"
 }}
 ```
 
-## EXAMPLE OF GOOD REASONING:
-"Started at green circle, followed white corridor going right, turned down at intersection, continued through winding corridor, turned left at junction, followed straight corridor to red circle goal."
+**IMPLEMENTATION NOTES:**
+- Start with the start position in the open set
+- Use f(n) = g(n) + h(n) where g is cost from start, h is heuristic to goal
+- Always expand the node with lowest f-score
+- Track parent nodes to reconstruct the path
+- Return the complete path from start to goal as coordinate pairs
 
-**Remember: This is a MAZE. You must navigate through the corridors, not cut through walls!**
-
-Now carefully examine the maze image and trace a valid path through the WHITE corridors."""
+Implement A* pathfinding now and return the shortest path through the maze."""
 
     return prompt
 
@@ -199,8 +201,10 @@ def parse_llm_path_response(response_text: str) -> Optional[List[Tuple[int, int]
         # Convert to list of tuples
         path = [tuple(point) for point in data['path']]
 
-        # Show reasoning if provided
-        if 'reasoning' in data:
+        # Show algorithm description if provided
+        if 'algorithm' in data:
+            print(f"\n  LLM Algorithm: {data['algorithm']}")
+        elif 'reasoning' in data:
             print(f"\n  LLM Reasoning: {data['reasoning']}")
 
         return path
@@ -269,7 +273,7 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
                          goal_pos: Tuple[int, int], api_key: Optional[str] = None,
                          verbose: bool = False) -> Optional[List[Tuple[int, int]]]:
     """
-    Solve the maze using Claude Sonnet 4.5 LLM.
+    Solve the maze using Claude Sonnet 4.5 LLM by asking it to implement A* algorithm.
 
     Args:
         binary_maze: Binary maze image (0=wall, 255=path)
@@ -283,7 +287,7 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
     """
     if verbose:
         print("\n" + "="*60)
-        print("LLM-BASED MAZE SOLVING (Claude Sonnet 4.5)")
+        print("LLM-BASED A* PATHFINDING (Claude Sonnet 4.5)")
         print("="*60)
 
     # Get API key
@@ -295,20 +299,17 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
         print("  Set it with: export ANTHROPIC_API_KEY='your-key-here'")
         return None
 
-    # Create annotated maze image for better understanding
-    annotated_maze = create_annotated_maze_image(binary_maze, start_pos, goal_pos)
-
-    # Encode image to base64
+    # Convert maze to simple 2D format
     if verbose:
-        print("  Encoding maze image...")
-    image_base64 = encode_image_to_base64(annotated_maze)
+        print("  Converting maze to array format...")
+    maze_grid = maze_to_simple_format(binary_maze, sample_rate=1)
 
-    # Create prompt
-    prompt = create_maze_solving_prompt(start_pos, goal_pos, binary_maze.shape)
+    # Create prompt asking for A* implementation
+    prompt = create_astar_prompt(maze_grid, start_pos, goal_pos)
 
     # Call Claude API
     if verbose:
-        print("  Calling Claude Sonnet 4.5 API...")
+        print("  Calling Claude Sonnet 4.5 API to implement A*...")
         print(f"  Maze size: {binary_maze.shape[1]}x{binary_maze.shape[0]}")
         print(f"  Start: {start_pos}, Goal: {goal_pos}")
 
@@ -317,24 +318,11 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
 
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=4096,
+            max_tokens=8192,
             messages=[
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/png",
-                                "data": image_base64,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ],
+                    "content": prompt
                 }
             ],
         )
@@ -359,7 +347,7 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
             print("  ⚠ Warning: Path validation found issues, but proceeding anyway")
 
         if verbose:
-            print(f"  ✓ LLM path generated successfully!")
+            print(f"  ✓ LLM A* path generated successfully!")
 
         return path
 
