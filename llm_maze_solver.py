@@ -77,113 +77,65 @@ def create_annotated_maze_image(binary_maze: np.ndarray, start_pos: Tuple[int, i
     return annotated
 
 
-def maze_to_simple_format(binary_maze: np.ndarray, sample_rate: int = 1) -> List[List[int]]:
+def create_maze_image_for_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
+                               goal_pos: Tuple[int, int]) -> np.ndarray:
     """
-    Convert binary maze to a simple 2D list format for the LLM.
+    Create maze image with START (red) and GOAL (green) circles marked.
 
     Args:
         binary_maze: Binary maze (0=wall, 255=path)
-        sample_rate: Sample every Nth pixel to reduce size (default=1, no sampling)
-
-    Returns:
-        2D list where 0=wall, 1=path
-    """
-    # Sample the maze to reduce size if needed
-    if sample_rate > 1:
-        sampled = binary_maze[::sample_rate, ::sample_rate]
-    else:
-        sampled = binary_maze
-
-    # Convert to 0/1 format (0=wall, 1=path)
-    maze_grid = (sampled > 128).astype(int).tolist()
-    return maze_grid
-
-
-def create_astar_prompt(maze_grid: List[List[int]], start_pos: Tuple[int, int],
-                        goal_pos: Tuple[int, int]) -> str:
-    """
-    Create a prompt asking Claude to implement A* algorithm on the maze.
-
-    Args:
-        maze_grid: 2D list where 0=wall, 1=path
         start_pos: (x, y) start position
         goal_pos: (x, y) goal position
 
     Returns:
+        BGR image with colored circles
+    """
+    # Convert grayscale to BGR
+    maze_bgr = cv2.cvtColor(binary_maze, cv2.COLOR_GRAY2BGR)
+
+    # Draw START as red circle
+    cv2.circle(maze_bgr, start_pos, 15, (0, 0, 255), -1)  # BGR: red
+
+    # Draw GOAL as green circle
+    cv2.circle(maze_bgr, goal_pos, 15, (0, 255, 0), -1)  # BGR: green
+
+    return maze_bgr
+
+
+def create_simple_maze_prompt() -> str:
+    """
+    Create a simple, clear prompt for maze solving.
+
+    Returns:
         Prompt string
     """
-    height = len(maze_grid)
-    width = len(maze_grid[0]) if height > 0 else 0
+    prompt = """Solve this maze image:
 
-    # Convert maze to compact string representation for the prompt
-    maze_str = json.dumps(maze_grid)
+1. Detect START (red circle) and GOAL (green circle) positions
+2. White pixels = walkable paths, Black pixels = walls
+3. Use A* pathfinding with 8-directional movement
+4. Output JSON format:
+   {"start": [x, y], "goal": [x, y], "path": [[x1, y1], [x2, y2], ...]}
+5. If markers are on walls, find nearest walkable pixel
 
-    prompt = f"""You are given a binary maze represented as a 2D array where:
-- 0 = WALL (cannot pass through)
-- 1 = PATH (can pass through)
-
-**MAZE DATA:**
-- Size: {width} x {height} (width x height)
-- Coordinate system: maze[y][x] where (0,0) is top-left
-- Start position: ({start_pos[0]}, {start_pos[1]})
-- Goal position: ({goal_pos[0]}, {goal_pos[1]})
-
-**THE MAZE ARRAY:**
-```json
-{maze_str}
-```
-
-**YOUR TASK:**
-Implement the A* pathfinding algorithm to find the shortest path from start to goal.
-
-**A* ALGORITHM REQUIREMENTS:**
-1. Use Manhattan or Euclidean distance as the heuristic
-2. Only move to cells where maze[y][x] == 1 (path cells)
-3. Use 8-directional movement (up, down, left, right, and diagonals)
-4. The path must stay within bounds: 0 <= x < {width}, 0 <= y < {height}
-5. Each step should move to an adjacent cell (8-connected neighbors)
-
-**OUTPUT FORMAT:**
-Return ONLY valid JSON with the path as an array of [x, y] coordinates:
-
-```json
-{{
-  "path": [
-    [{start_pos[0]}, {start_pos[1]}],
-    [x2, y2],
-    [x3, y3],
-    ...
-    [{goal_pos[0]}, {goal_pos[1]}]
-  ],
-  "algorithm": "Brief description of how A* found this path"
-}}
-```
-
-**IMPLEMENTATION NOTES:**
-- Start with the start position in the open set
-- Use f(n) = g(n) + h(n) where g is cost from start, h is heuristic to goal
-- Always expand the node with lowest f-score
-- Track parent nodes to reconstruct the path
-- Return the complete path from start to goal as coordinate pairs
-
-Implement A* pathfinding now and return the shortest path through the maze."""
+Return ONLY the JSON, no other text."""
 
     return prompt
 
 
-def parse_llm_path_response(response_text: str) -> Optional[List[Tuple[int, int]]]:
+def parse_llm_path_response(response_text: str, verbose: bool = False) -> Optional[List[Tuple[int, int]]]:
     """
     Parse the LLM response to extract the path coordinates.
 
     Args:
         response_text: Raw response from Claude API
+        verbose: If True, print debug info
 
     Returns:
         List of (x, y) tuples representing the path, or None if parsing fails
     """
     try:
         # Try to find JSON in the response
-        # Sometimes the LLM might add text before/after the JSON
         start_idx = response_text.find('{')
         end_idx = response_text.rfind('}') + 1
 
@@ -201,11 +153,9 @@ def parse_llm_path_response(response_text: str) -> Optional[List[Tuple[int, int]
         # Convert to list of tuples
         path = [tuple(point) for point in data['path']]
 
-        # Show algorithm description if provided
-        if 'algorithm' in data:
-            print(f"\n  LLM Algorithm: {data['algorithm']}")
-        elif 'reasoning' in data:
-            print(f"\n  LLM Reasoning: {data['reasoning']}")
+        # Show detected positions if available
+        if verbose and 'start' in data and 'goal' in data:
+            print(f"  LLM detected - Start: {data['start']}, Goal: {data['goal']}")
 
         return path
 
@@ -273,7 +223,7 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
                          goal_pos: Tuple[int, int], api_key: Optional[str] = None,
                          verbose: bool = False) -> Optional[List[Tuple[int, int]]]:
     """
-    Solve the maze using Claude Sonnet 4.5 LLM by asking it to implement A* algorithm.
+    Solve the maze using Claude Sonnet 4.5 LLM with image input.
 
     Args:
         binary_maze: Binary maze image (0=wall, 255=path)
@@ -299,17 +249,22 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
         print("  Set it with: export ANTHROPIC_API_KEY='your-key-here'")
         return None
 
-    # Convert maze to simple 2D format
+    # Create maze image with colored circles
     if verbose:
-        print("  Converting maze to array format...")
-    maze_grid = maze_to_simple_format(binary_maze, sample_rate=1)
+        print("  Creating maze image with START (red) and GOAL (green) markers...")
+    maze_image = create_maze_image_for_llm(binary_maze, start_pos, goal_pos)
 
-    # Create prompt asking for A* implementation
-    prompt = create_astar_prompt(maze_grid, start_pos, goal_pos)
+    # Encode image to base64
+    if verbose:
+        print("  Encoding maze image...")
+    image_base64 = encode_image_to_base64(maze_image)
+
+    # Create simple prompt
+    prompt = create_simple_maze_prompt()
 
     # Call Claude API
     if verbose:
-        print("  Calling Claude Sonnet 4.5 API to implement A*...")
+        print("  Calling Claude Sonnet 4.5 API...")
         print(f"  Maze size: {binary_maze.shape[1]}x{binary_maze.shape[0]}")
         print(f"  Start: {start_pos}, Goal: {goal_pos}")
 
@@ -322,7 +277,20 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
             messages=[
                 {
                     "role": "user",
-                    "content": prompt
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": image_base64,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ],
                 }
             ],
         )
@@ -333,7 +301,7 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
             print(f"  ✓ Received response from Claude ({len(response_text)} chars)")
 
         # Parse the response
-        path = parse_llm_path_response(response_text)
+        path = parse_llm_path_response(response_text, verbose=verbose)
 
         if path is None:
             print("  ✗ Failed to parse path from LLM response")
