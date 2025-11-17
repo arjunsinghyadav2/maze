@@ -24,7 +24,7 @@ from robot_utilities import move_to_home, move_to_specific_position, get_current
 
 # Pre-calibrated affine transformation matrix
 M = np.array([
-    [-7.03946756e-03, -4.69080162e-01, 3.69730111e+02],
+    [-7.03946756e-03, -4.69080162e-01, 4.19730111e+02],
     [-4.47296787e-01, 5.97834246e-03, 1.24360926e+02]
 ], dtype=np.float64)
 
@@ -36,7 +36,7 @@ H = np.array([
 ], dtype=np.float64)
 
 
-def move_robot_along_path(device, M, path, z_height=-45):
+def move_robot_along_path(device, M, path, z_height=-25):
     """
     Move the robot along the given path.
 
@@ -82,21 +82,21 @@ def main():
     debug_mode = "--debug" in sys.argv
 
     # Parse step size
-    step_size = 5
+    step_size = 85
     if "--step-size" in sys.argv:
         idx = sys.argv.index("--step-size")
         if idx + 1 < len(sys.argv):
             step_size = int(sys.argv[idx + 1])
 
     # Parse z height
-    z_height = -45
+    z_height = 0
     if "--z-height" in sys.argv:
         idx = sys.argv.index("--z-height")
         if idx + 1 < len(sys.argv):
             z_height = float(sys.argv[idx + 1])
 
     # Parse wall clearance
-    wall_clearance = 5
+    wall_clearance = 25
     if "--wall-clearance" in sys.argv:
         idx = sys.argv.index("--wall-clearance")
         if idx + 1 < len(sys.argv):
@@ -259,7 +259,7 @@ def main():
         print("  ⚠ WARNING: Goal position is on a wall (black pixel)!")
 
     # Solve the maze with goal radius to handle blocked goal positions
-    goal_radius = 100  # If we get within 100px of goal, connect with straight line
+    goal_radius = 10  # If we get within 100px of goal, connect with straight line
     print(f"\nSolving maze with A* algorithm (goal radius: {goal_radius}px)...")
     path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True, goal_radius=goal_radius)
 
@@ -313,7 +313,7 @@ def main():
             try:
                 # Connect to Dobot
                 print("\nConnecting to Dobot on /dev/ttyACM0...")
-                device = pydobot.Dobot(port="/dev/ttyACM0")
+                device = pydobot.Dobot(port="/dev/tty.usbmodem479631A314332")
                 device.speed(50, 50)
 
                 # Home the robot

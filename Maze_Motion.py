@@ -7,9 +7,8 @@ from camera_utilities import apply_affine, fit_affine, apply_homography, fit_hom
 from robot_utilities import move_to_home, move_to_specific_position, get_current_pose
 
 M = np.array([
-     [-7.03946756e-03 ,-4.69080162e-01,  3.69730111e+02],
-     [-4.47296787e-01  ,5.97834246e-03,  1.24360926e+02]
-], dtype=np.float64)
+    [ 1.12811771e-03, -1.82296980e-01,  3.73759663e+02],
+    [-1.77124686e-01, -2.58143768e-03,  1.46987989e+02]], dtype=np.float64)
 
 H = np.array([
     [-2.44594058e-02, -4.75669460e-01,  3.67247188e+02],
@@ -21,11 +20,11 @@ def move_robot_point(device,M,u,v):
     Xa, Ya = apply_affine(M, u, v) # Using Affine
     # Xa, Ya = apply_homography(H, u, v) # Using Homography
     print(f"Affine:  pixel({u:.3f}, {v:.3f}) -> robot({Xa:.6f}, {Ya:.6f})")
-    move_to_specific_position(device, x=Xa, y=Ya, z=-45)
+    move_to_specific_position(device, x=Xa, y=Ya, z=-25)
     time.sleep(1)
 
 def main():
-    device = pydobot.Dobot(port="/dev/ttyACM0")
+    device = pydobot.Dobot(port="/dev/tty.usbmodem479631A314332")
     device.speed(50, 50)
     move_to_home(device)
     time.sleep(2)

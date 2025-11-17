@@ -70,7 +70,7 @@ def find_dobot_port():
         print(f"  {i+1}. {port.device} - {port.description}")
 
     # Try to find /dev/tty.usb* automatically
-    dobot_port = None
+    dobot_port = "/dev/tty.usbmodem479631A314332"
     for port in ports:
         if 'usb' in port.device.lower() or 'tty.usb' in port.device.lower():
             dobot_port = port.device
@@ -92,7 +92,7 @@ def connect_dobot(port):
     """Connect to Dobot robot"""
     print(f"\nConnecting to Dobot at {port}...")
     try:
-        device = pydobot.Dobot(port=port, verbose=False)
+        device = pydobot.Dobot(port="/dev/tty.usbmodem4380386E02302")
         print("✓ Connected to Dobot successfully!")
         return device
     except Exception as e:
@@ -250,7 +250,7 @@ def main():
     input("\nPress ENTER to begin...")
 
     # Find and connect to Dobot
-    port = find_dobot_port()
+    port = "/dev/tty.usbmodem4380386E02302"
     device = connect_dobot(port)
 
     if device is None:
@@ -284,7 +284,7 @@ def main():
 
         # Get actual robot position
         time.sleep(0.5)
-        x, y, z, r, j1, j2, j3, j4 = device.pose()
+        x, y, z, r, j1, j2, j3, j4 = device.get_pose()
         print(f"  Actual robot pose: X={x:.2f}, Y={y:.2f}, Z={z:.2f}")
 
         # Capture image and get pixel coordinates
