@@ -93,58 +93,78 @@ def create_maze_solving_prompt(start_pos: Tuple[int, int], goal_pos: Tuple[int, 
     """
     height, width = maze_shape
 
-    prompt = f"""You are an expert maze solver. I need you to find a valid path through this maze image.
+    prompt = f"""You are solving a maze puzzle. Study the image carefully to find a VALID path through the maze corridors.
 
-## MAZE FORMAT:
-- **Black pixels (value 0)** = WALLS (cannot pass through)
-- **White pixels (value 255)** = PATHS (can pass through)
-- The maze is {width}x{height} pixels
-- Walls have some thickness (typically 3-5 pixels)
+## CRITICAL RULES - READ CAREFULLY:
 
-## START AND GOAL POSITIONS:
-- **START position (GREEN circle)**: ({start_pos[0]}, {start_pos[1]})
-- **GOAL position (RED circle)**: ({goal_pos[0]}, {goal_pos[1]})
-- Coordinates are in (x, y) format where x is horizontal (left to right) and y is vertical (top to bottom)
-- Origin (0, 0) is at the TOP-LEFT corner
+**THIS IS A MAZE - YOU CANNOT GO IN A STRAIGHT LINE!**
+
+The maze has:
+- **BLACK pixels (0)** = SOLID WALLS - You CANNOT pass through these!
+- **WHITE pixels (255)** = OPEN CORRIDORS - You MUST stay in these areas!
+
+**YOU MUST FOLLOW THE WHITE CORRIDORS. DO NOT CUT THROUGH WALLS.**
+
+## IMAGE DETAILS:
+- Size: {width}x{height} pixels
+- Coordinate system: (0,0) is TOP-LEFT, x goes RIGHT, y goes DOWN
+- Wall thickness: approximately 3-5 pixels (stay in center of corridors)
+- Grid lines shown every 50 pixels for reference
+
+## START AND GOAL:
+- **START (GREEN circle)**: pixel ({start_pos[0]}, {start_pos[1]})
+- **GOAL (RED circle)**: pixel ({goal_pos[0]}, {goal_pos[1]})
 
 ## YOUR TASK:
-Find a valid path from START to GOAL that:
-1. **Only passes through WHITE pixels** (paths) - never through black pixels (walls)
-2. **Maintains clearance from walls** - stay at least 2-3 pixels away from black walls
-3. **Takes a reasonable route** - doesn't need to be optimal, just valid and smooth
-4. **Includes enough waypoints** - approximately every 10-20 pixels for smooth navigation
+Trace a path through the WHITE corridors from START to GOAL.
+
+**STEP-BY-STEP APPROACH:**
+1. **Look at the maze image** - identify the black walls and white corridors
+2. **Find the START (green circle)** - this is where you begin
+3. **Find the GOAL (red circle)** - this is your destination
+4. **Trace the white corridors** from start to goal - like following a road on a map
+5. **Avoid all black areas** - these are walls you cannot pass through
+6. **Stay in the CENTER of white corridors** - don't hug the walls
+7. **Place waypoints every 10-20 pixels** along the corridor path
+
+## PATH REQUIREMENTS:
+✓ First waypoint = START position [{start_pos[0]}, {start_pos[1]}]
+✓ Last waypoint = GOAL position [{goal_pos[0]}, {goal_pos[1]}]
+✓ ALL waypoints between must be in WHITE areas (never black!)
+✓ Stay 3-5 pixels away from walls (in center of corridors)
+✓ Follow the natural turns and curves of the maze corridors
+✓ Waypoints spaced every 10-20 pixels for smooth movement
+✓ Total waypoints should be roughly Manhattan distance / 15
+
+## WHAT NOT TO DO:
+✗ DO NOT draw a straight line from start to goal
+✗ DO NOT cut through black wall areas
+✗ DO NOT place waypoints on or near black pixels
+✗ DO NOT take shortcuts through walls
+✗ DO NOT skip sections of the corridor
 
 ## OUTPUT FORMAT:
-Return ONLY a JSON object with this exact structure:
+Return ONLY valid JSON (no other text):
+
 ```json
 {{
   "path": [
-    [x1, y1],
+    [{start_pos[0]}, {start_pos[1]}],
     [x2, y2],
     [x3, y3],
     ...
-    [xN, yN]
+    [{goal_pos[0]}, {goal_pos[1]}]
   ],
-  "reasoning": "Brief explanation of your path strategy"
+  "reasoning": "Brief description of the route you traced through the corridors"
 }}
 ```
 
-## IMPORTANT CONSTRAINTS:
-- The first point MUST be the START position: [{start_pos[0]}, {start_pos[1]}]
-- The last point MUST be the GOAL position: [{goal_pos[0]}, {goal_pos[1]}]
-- ALL intermediate points must be in white (passable) areas
-- Stay away from walls to ensure safe navigation
-- Include enough waypoints for smooth movement (every 10-20 pixels)
-- Output ONLY the JSON - no other text before or after
+## EXAMPLE OF GOOD REASONING:
+"Started at green circle, followed white corridor going right, turned down at intersection, continued through winding corridor, turned left at junction, followed straight corridor to red circle goal."
 
-## ANALYSIS APPROACH:
-1. Study the maze structure and identify the main corridors
-2. Find a clear path from start to goal avoiding walls
-3. Generate waypoints along this path
-4. Verify each waypoint is in a white (passable) area
-5. Ensure smooth transitions between waypoints
+**Remember: This is a MAZE. You must navigate through the corridors, not cut through walls!**
 
-Now analyze the image and provide the path as JSON."""
+Now carefully examine the maze image and trace a valid path through the WHITE corridors."""
 
     return prompt
 
