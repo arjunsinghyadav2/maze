@@ -221,15 +221,17 @@ def validate_path(path: List[Tuple[int, int]], binary_maze: np.ndarray,
 
 
 def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
-                         goal_pos: Tuple[int, int], api_key: Optional[str] = None,
+                         goal_pos: Tuple[int, int], original_image: Optional[np.ndarray] = None,
+                         api_key: Optional[str] = None,
                          verbose: bool = False) -> Optional[List[Tuple[int, int]]]:
     """
     Solve the maze using Claude Sonnet 4.5 LLM with image input.
 
     Args:
-        binary_maze: Binary maze image (0=wall, 255=path)
+        binary_maze: Binary maze image (0=wall, 255=path) - used for validation
         start_pos: (x, y) start position
         goal_pos: (x, y) goal position
+        original_image: Original camera/raw image (if None, uses binary_maze)
         api_key: Anthropic API key (or uses ANTHROPIC_API_KEY env var)
         verbose: If True, print detailed information
 
@@ -250,10 +252,19 @@ def solve_maze_with_llm(binary_maze: np.ndarray, start_pos: Tuple[int, int],
         print("  Set it with: export ANTHROPIC_API_KEY='your-key-here'")
         return None
 
-    # Create maze image with colored circles
-    if verbose:
-        print("  Creating maze image with START (red) and GOAL (green) markers...")
-    maze_image = create_maze_image_for_llm(binary_maze, start_pos, goal_pos)
+    # Use original image if provided, otherwise use binary maze
+    if original_image is not None:
+        # Mark start/goal on the original raw image
+        if verbose:
+            print("  Using original camera image with START (red) and GOAL (green) markers...")
+        maze_image = original_image.copy()
+        cv2.circle(maze_image, start_pos, 15, (0, 0, 255), -1)  # Red for START
+        cv2.circle(maze_image, goal_pos, 15, (0, 255, 0), -1)  # Green for GOAL
+    else:
+        # Fallback to binary maze
+        if verbose:
+            print("  Creating maze image with START (red) and GOAL (green) markers...")
+        maze_image = create_maze_image_for_llm(binary_maze, start_pos, goal_pos)
 
     # Encode image to base64
     if verbose:
