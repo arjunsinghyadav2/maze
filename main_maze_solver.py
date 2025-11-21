@@ -72,6 +72,7 @@ def main():
         print("  --step-size N       : Simplify path by taking every Nth point (default: 5)")
         print("  --z-height Z        : Z-coordinate for robot movement (default: -45)")
         print("  --wall-clearance N  : Safety margin around walls in pixels (default: 5)")
+        print("  --no-circle-removal : Skip circle removal and wall clearance (test raw edges)")
         print("  --debug             : Show detailed debug images at each processing step")
         print("\nLLM Tool Solver:")
         print("  Requires ANTHROPIC_API_KEY environment variable")
@@ -85,6 +86,7 @@ def main():
 
     use_robot = "--no-robot" not in sys.argv
     debug_mode = "--debug" in sys.argv
+    no_circle_removal = "--no-circle-removal" in sys.argv
 
     # Parse solver method
     solver_method = "astar"  # default
@@ -255,11 +257,16 @@ def main():
 
     # Preprocess the maze
     print(f"\nPreprocessing maze (wall clearance: {wall_clearance}px)...")
-    print(f"Circle removal: Localized within 110px of start and goal positions")
+    if no_circle_removal:
+        print("Circle removal: SKIPPED (testing stage 8 raw edges)")
+        print("Wall clearance: SKIPPED")
+    else:
+        print(f"Circle removal: Localized within 110px of start and goal positions")
     if debug_mode:
         print("Debug mode: Showing detailed preprocessing steps...")
     binary_maze = preprocess_maze(image, wall_clearance=wall_clearance, debug=debug_mode,
-                                   start_pos=start_pos, goal_pos=goal_pos, circle_radius=110)
+                                   start_pos=start_pos, goal_pos=goal_pos, circle_radius=110,
+                                   skip_circle_removal=no_circle_removal)
 
     # Save the binary maze for debugging
     if image_path:
