@@ -4,7 +4,7 @@ import time
 # # List likely serial devices (won't error if missing)
 # ls -l /dev/ttyACM* /dev/ttyUSB* /dev/serial/by-id 2>/dev/null || true
 
-device = pydobot.Dobot(port="/dev/ttyACM0")
+device = pydobot.Dobot(port="/dev/tty.usbmodem479631A314332")
 
 def move_to_home(device):
     #_______________________________________________________
@@ -30,9 +30,9 @@ def get_current_pose(device):
     #_______________________________________________________
     # Getting the current pose
     # Code ##################################################
-    time.sleep(1)  
+    time.sleep(1)
     print("current pose")
-    x,y,z,r,j1,j2.j3,j4 = device.pose()  # Get the current position and joint angles
+    x,y,z,r,j1,j2,j3,j4 = device.pose()  # Get the current position and joint angles
     print(f"pose: {x,y,z}")
     return (x,y,z)
     # Code End ##############################################
