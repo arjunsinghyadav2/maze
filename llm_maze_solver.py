@@ -149,7 +149,7 @@ You can execute code multiple times to debug and refine your solution."""
             # Call Claude with tools
             response = client.messages.create(
                 model="claude-sonnet-4-5-20250929",
-                max_tokens=4096,
+                max_tokens=10096,
                 system=system_prompt,
                 tools=tools,
                 messages=messages

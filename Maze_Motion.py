@@ -24,7 +24,7 @@ def move_robot_point(device,M,u,v):
     time.sleep(1)
 
 def main():
-    device = pydobot.Dobot(port="/dev/tty.usbmodem479631A314332")
+    device = pydobot.Dobot(port="/dev/tty.usbmodem4796319814332")
     device.speed(50, 50)
     move_to_home(device)
     time.sleep(2)

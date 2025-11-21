@@ -140,7 +140,7 @@ def main():
             print("Moving robot to home position for consistent camera angle...")
 
             try:
-                device = pydobot.Dobot(port="/dev/tty.usbmodem479631A314332")
+                device = pydobot.Dobot(port="/dev/tty.usbmodem4796319814332")
                 device.speed(50, 50)
                 move_to_home(device)
                 print("✓ Robot homed and ready for image capture")
@@ -366,7 +366,7 @@ def main():
             try:
                 # Connect to Dobot
                 print("\nConnecting to Dobot...")
-                device = pydobot.Dobot(port="/dev/tty.usbmodem479631A314332")
+                device = pydobot.Dobot(port="/dev/tty.usbmodem4796319814332")
                 device.speed(50, 50)
 
                 # Home the robot (ensures starting position before maze solving)
