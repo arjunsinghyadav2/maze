@@ -130,7 +130,35 @@ def main():
     else:
         # Capture from camera with same setup as open_camera.py
         print("No image path provided - capturing from camera (device 0)...")
-        print("Position your maze in front of the camera")
+
+        # Home the robot first (camera is mounted on end effector)
+        if use_robot:
+            print("\n" + "="*50)
+            print("ROBOT HOMING (Camera Positioning)")
+            print("="*50)
+            print("Camera is mounted on robot end effector.")
+            print("Moving robot to home position for consistent camera angle...")
+
+            try:
+                device = pydobot.Dobot(port="/dev/tty.usbmodem479631A314332")
+                device.speed(50, 50)
+                move_to_home(device)
+                print("✓ Robot homed and ready for image capture")
+
+                # Close connection - will reconnect later for maze solving
+                device.close()
+                print("✓ Robot connection closed")
+                print("="*50 + "\n")
+            except Exception as e:
+                print(f"Error homing robot: {e}")
+                print("Continuing with camera capture anyway...")
+                print("WARNING: Camera position may not be at home!")
+        else:
+            print("\nWARNING: Running with --no-robot flag")
+            print("Robot will NOT be moved to home position before capture")
+            print("Camera position may not be consistent!")
+
+        print("\nPosition your maze in front of the camera")
         print("Press SPACE to capture, ESC to exit")
 
         # Camera configuration (matches open_camera.py)
@@ -337,11 +365,12 @@ def main():
         if proceed == 'yes' or proceed == 'y':
             try:
                 # Connect to Dobot
-                print("\nConnecting to Dobot on /dev/ttyACM0...")
+                print("\nConnecting to Dobot...")
                 device = pydobot.Dobot(port="/dev/tty.usbmodem479631A314332")
                 device.speed(50, 50)
 
-                # Home the robot
+                # Home the robot (ensures starting position before maze solving)
+                print("Homing robot before starting maze path...")
                 move_to_home(device)
                 time.sleep(2)
 
