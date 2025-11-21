@@ -19,7 +19,7 @@ import pydobot
 
 from maze_detector import detect_red_circle, detect_other_circle, preprocess_maze, visualize_detection
 from maze_solver import a_star_search, simplify_path, visualize_path
-from llm_maze_solver import solve_maze_with_llm
+from llm_maze_solver import solve_maze_with_llm, solve_maze_with_llm_tools
 from camera_utilities import apply_affine, apply_homography
 from robot_utilities import move_to_home, move_to_specific_position, get_current_pose
 
@@ -68,14 +68,16 @@ def main():
         print("\nIf no image path provided, captures from camera (device 0)")
         print("\nOptions:")
         print("  --no-robot          : Run without connecting to robot (visualization only)")
-        print("  --solver METHOD     : Pathfinding method: 'astar' or 'llm' (default: astar)")
+        print("  --solver METHOD     : Pathfinding method: 'astar', 'llm', or 'llm-tools' (default: astar)")
         print("  --step-size N       : Simplify path by taking every Nth point (default: 5)")
         print("  --z-height Z        : Z-coordinate for robot movement (default: -45)")
         print("  --wall-clearance N  : Safety margin around walls in pixels (default: 5)")
         print("  --debug             : Show detailed debug images at each processing step")
-        print("\nLLM Solver:")
+        print("\nLLM Solvers:")
         print("  Requires ANTHROPIC_API_KEY environment variable")
-        print("  Uses Claude Sonnet 4.5 for visual reasoning")
+        print("  Uses Claude Sonnet 4.5")
+        print("  - 'llm': Asks Claude to mentally simulate A* algorithm (unreliable)")
+        print("  - 'llm-tools': Gives Claude code execution tools (recommended, iterative)")
         sys.exit(1)
 
     # Check if first argument is an image path or a flag
@@ -92,8 +94,8 @@ def main():
         idx = sys.argv.index("--solver")
         if idx + 1 < len(sys.argv):
             solver_method = sys.argv[idx + 1].lower()
-            if solver_method not in ["astar", "llm"]:
-                print(f"Error: Invalid solver method '{solver_method}'. Use 'astar' or 'llm'")
+            if solver_method not in ["astar", "llm", "llm-tools"]:
+                print(f"Error: Invalid solver method '{solver_method}'. Use 'astar', 'llm', or 'llm-tools'")
                 sys.exit(1)
 
     # Parse step size
@@ -280,9 +282,13 @@ def main():
         print(f"\nSolving maze with A* algorithm (goal radius: {goal_radius}px)...")
         path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True, goal_radius=goal_radius)
     elif solver_method == "llm":
-        # Use Claude Sonnet 4.5 LLM to implement A* algorithm
-        print(f"\nSolving maze with Claude Sonnet 4.5 LLM (implementing A*)...")
+        # Use Claude Sonnet 4.5 LLM to simulate A* algorithm (mental execution)
+        print(f"\nSolving maze with Claude Sonnet 4.5 LLM (mental simulation)...")
         path = solve_maze_with_llm(binary_maze, start_pos, goal_pos, verbose=True)
+    elif solver_method == "llm-tools":
+        # Use Claude Sonnet 4.5 LLM with code execution tools (iterative, reliable)
+        print(f"\nSolving maze with Claude Sonnet 4.5 LLM (tool-based, iterative)...")
+        path = solve_maze_with_llm_tools(binary_maze, start_pos, goal_pos, verbose=True)
     else:
         print(f"Error: Unknown solver method '{solver_method}'")
         sys.exit(1)
