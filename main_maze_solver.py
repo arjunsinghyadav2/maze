@@ -71,7 +71,8 @@ def main():
         print("  --solver METHOD     : Pathfinding method: 'astar' or 'llm-tools' (default: astar)")
         print("  --step-size N       : Simplify path by taking every Nth point (default: 5)")
         print("  --z-height Z        : Z-coordinate for robot movement (default: -45)")
-        print("  --wall-clearance N  : Safety margin around walls in pixels (default: 5)")
+        print("  --wall-clearance N  : Safety margin around walls in pixels (default: 25)")
+        print("  --goal-radius N     : A* goal radius - accept path within N pixels of goal (default: 5)")
         print("  --no-circle-removal : Skip circle removal and wall clearance (test raw edges)")
         print("  --debug             : Show detailed debug images at each processing step")
         print("\nLLM Tool Solver:")
@@ -118,6 +119,13 @@ def main():
         idx = sys.argv.index("--wall-clearance")
         if idx + 1 < len(sys.argv):
             wall_clearance = int(sys.argv[idx + 1])
+
+    # Parse goal radius
+    goal_radius = 5
+    if "--goal-radius" in sys.argv:
+        idx = sys.argv.index("--goal-radius")
+        if idx + 1 < len(sys.argv):
+            goal_radius = int(sys.argv[idx + 1])
 
     # Load or capture the maze image
     if image_path:
@@ -311,7 +319,6 @@ def main():
     # Solve the maze using selected method
     if solver_method == "astar":
         # Use A* algorithm with goal radius
-        goal_radius = 5  # Optimal value - if we get within 10px of goal, connect with straight line
         print(f"\nSolving maze with A* algorithm (goal radius: {goal_radius}px)...")
         path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True, goal_radius=goal_radius)
     elif solver_method == "llm-tools":
