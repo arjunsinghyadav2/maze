@@ -390,6 +390,13 @@ You can execute code multiple times to debug and refine your solution."""
                                     tool_result = f"Success!\nOutput:\n{output}"
                                     if error:
                                         tool_result += f"\nWarnings:\n{error}"
+
+                                    # Try to extract path from tool output
+                                    potential_path = extract_json_from_response(output)
+                                    if potential_path and len(potential_path) > 0:
+                                        final_path = potential_path
+                                        if verbose:
+                                            print(f"\n  ✓ Extracted path from tool output: {len(potential_path)} waypoints")
                                 else:
                                     tool_result = f"Error (exit code {return_code}):\n{error}\nOutput:\n{output}"
 
@@ -423,6 +430,12 @@ You can execute code multiple times to debug and refine your solution."""
                 messages.append({"role": "assistant", "content": response.content})
                 messages.append({"role": "user", "content": tool_results})
 
+                # If we found a path during tool execution, we can finish
+                if final_path:
+                    if verbose:
+                        print(f"\n✓ Path found during tool execution!")
+                    break
+
             elif response.stop_reason == "end_turn":
                 # Claude has finished - extract the path from response
                 response_text = ""
@@ -450,10 +463,18 @@ You can execute code multiple times to debug and refine your solution."""
                         "content": "Please provide the final path as a JSON list of coordinates: [[x1, y1], [x2, y2], ...]"
                     })
             else:
-                # Unexpected stop reason
+                # Unexpected stop reason (e.g., max_tokens)
                 if verbose:
                     print(f"Unexpected stop reason: {response.stop_reason}")
-                break
+                # Check if we already have a path from previous iterations
+                if final_path:
+                    if verbose:
+                        print(f"  But we already have a valid path from previous iteration!")
+                    break
+                else:
+                    if verbose:
+                        print(f"  No valid path found yet.")
+                    break
 
         # Cleanup
         import shutil
