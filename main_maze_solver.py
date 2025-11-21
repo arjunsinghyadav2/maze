@@ -26,7 +26,7 @@ from robot_utilities import move_to_home, move_to_specific_position, get_current
 # Pre-calibrated affine transformation matrix
 M = np.array([
     [-7.03946756e-03, -4.69080162e-01, 4.19730111e+02],
-    [-4.47296787e-01, 5.97834246e-03, 1.24360926e+02]
+    [-4.47296787e-01, 5.97834246e-03, 1.27360926e+02]
 ], dtype=np.float64)
 
 # Pre-calibrated homography matrix (alternative)
@@ -97,14 +97,14 @@ def main():
                 sys.exit(1)
 
     # Parse step size
-    step_size = 85
+    step_size = 60
     if "--step-size" in sys.argv:
         idx = sys.argv.index("--step-size")
         if idx + 1 < len(sys.argv):
             step_size = int(sys.argv[idx + 1])
 
     # Parse z height
-    z_height = 0
+    z_height = -35
     if "--z-height" in sys.argv:
         idx = sys.argv.index("--z-height")
         if idx + 1 < len(sys.argv):
@@ -276,7 +276,7 @@ def main():
     # Solve the maze using selected method
     if solver_method == "astar":
         # Use A* algorithm with goal radius
-        goal_radius = 10  # Optimal value - if we get within 10px of goal, connect with straight line
+        goal_radius = 5  # Optimal value - if we get within 10px of goal, connect with straight line
         print(f"\nSolving maze with A* algorithm (goal radius: {goal_radius}px)...")
         path = a_star_search(binary_maze, start_pos, goal_pos, verbose=True, goal_radius=goal_radius)
     elif solver_method == "llm":
