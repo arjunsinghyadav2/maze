@@ -159,7 +159,7 @@ def detect_circles(image, color='red'):
 def preprocess_maze(image, wall_clearance=5, debug=False, start_pos=None, goal_pos=None, circle_radius=45):
     """
     Preprocess the maze image to extract the maze structure.
-    Uses edge detection with morphological operations.
+    Uses enhanced edge detection with CLAHE, bilateral filtering, and Canny edge detection.
 
     Args:
         image: BGR image of the maze
@@ -175,28 +175,30 @@ def preprocess_maze(image, wall_clearance=5, debug=False, start_pos=None, goal_p
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Blur to reduce noise
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Step 1: Enhance contrast with CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
 
-    # Sobel edge detection (X and Y gradients)
-    sobelx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=3)
-    sobely = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)
+    # Step 2: Bilateral filter - reduces noise while preserving edges better than Gaussian
+    bilateral = cv2.bilateralFilter(enhanced, 9, 75, 75)
 
-    # Compute gradient magnitude
-    sobel_magnitude = np.sqrt(sobelx**2 + sobely**2)
+    # Step 3: Canny edge detection - superior to Sobel for crisp edges
+    # Use automatic threshold calculation based on image statistics
+    median = np.median(bilateral)
+    lower = int(max(0, 0.66 * median))
+    upper = int(min(255, 1.33 * median))
 
-    # Normalize to 0-255 range
-    sobel_normalized = np.uint8(sobel_magnitude / sobel_magnitude.max() * 255)
+    # Apply Canny with calculated thresholds
+    edges = cv2.Canny(bilateral, lower, upper, apertureSize=3, L2gradient=True)
 
-    # Threshold to get binary edges
-    _, edges = cv2.threshold(sobel_normalized, 50, 255, cv2.THRESH_BINARY)
+    # Step 4: Morphological operations to connect broken edges and fill gaps
+    # Use optimized kernels for better line connectivity
+    kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    edges_closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel_close, iterations=2)
 
-    # Connect broken edges
-    kernel = np.ones((3, 3), np.uint8)
-    edges_closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-    # Dilate to thicken walls - THIS IS THE PERFECT STAGE (walls=white)
-    walls_white = cv2.dilate(edges_closed, kernel, iterations=2)
+    # Step 5: Dilate to thicken walls for crisp, continuous lines
+    kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    walls_white = cv2.dilate(edges_closed, kernel_dilate, iterations=2)
 
     # Invert: walls=0 (black), paths=255 (white) for maze solver
     binary = cv2.bitwise_not(walls_white)
@@ -243,11 +245,11 @@ def preprocess_maze(image, wall_clearance=5, debug=False, start_pos=None, goal_p
     if debug:
         cv2.imshow("1. Original", image)
         cv2.imshow("2. Grayscale", gray)
-        cv2.imshow("3. Blurred", blurred)
-        cv2.imshow("4. Sobel Edges", sobel_normalized)
-        cv2.imshow("5. Sobel Thresholded", edges)
+        cv2.imshow("3. CLAHE Enhanced", enhanced)
+        cv2.imshow("4. Bilateral Filtered", bilateral)
+        cv2.imshow("5. Canny Edges", edges)
         cv2.imshow("6. Edges Closed", edges_closed)
-        cv2.imshow("7. Edges Closed & Dilated (WALLS=WHITE) ***PERFECT***", walls_white)
+        cv2.imshow("7. Edges Closed & Dilated (WALLS=WHITE) ***CRISP***", walls_white)
         cv2.imshow("8. Inverted (WALLS=0/BLACK, PATHS=255/WHITE)", binary_before_circle_removal)
 
         # Show localized circle removal mask if positions provided
@@ -266,8 +268,11 @@ def preprocess_maze(image, wall_clearance=5, debug=False, start_pos=None, goal_p
             cv2.imshow("10. After Wall Clearance", binary)
 
         print("\n" + "="*60)
-        print("MAZE PREPROCESSING PIPELINE - SOBEL METHOD")
+        print("MAZE PREPROCESSING PIPELINE - ENHANCED CANNY METHOD")
         print("="*60)
+        print(f"\nCanny thresholds: lower={lower}, upper={upper} (auto-calculated)")
+        print(f"CLAHE applied with clipLimit=2.0, tileGridSize=(8,8)")
+        print(f"Bilateral filter: d=9, sigmaColor=75, sigmaSpace=75")
         if start_pos is not None or goal_pos is not None:
             print(f"\nCircle removal: LOCALIZED (radius={circle_radius}px)")
             if start_pos:
