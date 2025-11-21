@@ -282,7 +282,7 @@ def main():
     elif solver_method == "llm":
         # Use Claude Sonnet 4.5 LLM to implement A* algorithm
         print(f"\nSolving maze with Claude Sonnet 4.5 LLM (implementing A*)...")
-        path = solve_maze_with_llm(binary_maze, start_pos, goal_pos, original_image=image, verbose=True)
+        path = solve_maze_with_llm(binary_maze, start_pos, goal_pos, verbose=True)
     else:
         print(f"Error: Unknown solver method '{solver_method}'")
         sys.exit(1)
