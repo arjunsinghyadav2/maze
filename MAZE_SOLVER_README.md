@@ -1,277 +1,235 @@
-# Maze Solver with Dobot Integration
+# Maze Solver with Dobot Robot
 
-A comprehensive maze solving system that:
-1. Reads a maze image
-2. Detects red circle and automatically finds the other circle (any color)
-3. Solves the maze using A* pathfinding algorithm
-4. Converts pixel coordinates to Dobot robot coordinates
-5. Moves the Dobot robot along the solved path
-
-## Files Structure
-
-### Main Components
-- **`main_maze_solver.py`** - Main script to run the complete maze solving pipeline
-- **`maze_detector.py`** - Image processing module for detecting circles and preprocessing maze
-- **`maze_solver.py`** - A* pathfinding algorithm implementation
-- **`create_sample_maze.py`** - Utility to generate sample maze images for testing
-
-### Supporting Modules
-- **`camera_utilities.py`** - Coordinate transformation functions (affine/homography)
-- **`robot_utilities.py`** - Dobot robot control functions
-- **`Affine_transform.py`** - Calibration and transformation matrix generation
-- **`get_pixel_cordinates.py`** - Interactive tool to get pixel coordinates from camera
-
-## Requirements
-
-```bash
-pip install opencv-python numpy pydobot
-```
+An automated maze solving system that captures maze images, detects start/goal positions, finds the optimal path, and controls a Dobot robot to trace the solution.
 
 ## Quick Start
 
-### 1. Generate a Sample Maze (for testing)
-
 ```bash
-python create_sample_maze.py sample_maze.png
-```
+# Install dependencies
+pip install opencv-python numpy pydobot anthropic
 
-This creates a simple maze image with red and green circles.
-
-### 2. Run the Maze Solver (Visualization Only)
-
-**Option A: With image file**
-```bash
-python main_maze_solver.py sample_maze.png --no-robot
-```
-
-**Option B: Capture from camera**
-```bash
-python main_maze_solver.py --no-robot
-```
-- Opens camera feed
-- Press SPACE to capture maze image
-- Press ESC to cancel
-
-This will:
-- Detect the red and other circles
-- Ask which circle is the start
-- Solve the maze
-- Display the solution
-- Save the visualization
-
-### 3. Run with Dobot Robot
-
-**With image file:**
-```bash
-python main_maze_solver.py sample_maze.png
-```
-
-**With camera capture:**
-```bash
-python main_maze_solver.py
-```
-
-This will perform all steps above and then move the Dobot robot along the path.
-
-## Usage Options
-
-```bash
-python main_maze_solver.py [maze_image_path] [OPTIONS]
-```
-
-**Note:** If no image path is provided, the program captures from camera (device 0)
-
-### Options:
-- `--no-robot` : Run without connecting to robot (visualization only)
-- `--step-size N` : Simplify path by taking every Nth point (default: 5)
-- `--z-height Z` : Z-coordinate for robot movement (default: -45)
-- `--wall-clearance N` : Safety margin around walls in pixels (default: 5)
-- `--debug` : Show detailed debug images at each processing step
-
-### Examples:
-
-```bash
-# Solve maze from image file (with robot)
-python main_maze_solver.py my_maze.png
-
-# Capture from camera and solve (with robot)
+# Solve maze from camera (homes robot first for consistent camera angle)
 python main_maze_solver.py
 
-# Visualization only from image (no robot)
-python main_maze_solver.py my_maze.png --no-robot
+# Solve from image file
+python main_maze_solver.py maze.png
 
-# Visualization only from camera (no robot)
+# Visualization only (no robot movement)
 python main_maze_solver.py --no-robot
-
-# Use finer path resolution
-python main_maze_solver.py my_maze.png --step-size 3
-
-# Adjust pen height
-python main_maze_solver.py my_maze.png --z-height -50
-
-# Increase wall clearance for wider paths
-python main_maze_solver.py my_maze.png --wall-clearance 8
-
-# Decrease wall clearance for narrow mazes
-python main_maze_solver.py my_maze.png --wall-clearance 3
-
-# Debug mode - see maze processing steps
-python main_maze_solver.py my_maze.png --no-robot --debug
-
-# Capture from camera with debug mode
-python main_maze_solver.py --no-robot --debug
 ```
+
+## Command Line Options
+
+```bash
+python main_maze_solver.py [image_path] [OPTIONS]
+```
+
+**If no image path provided**: Captures from camera (device 0)
+
+**Options:**
+- `--solver METHOD` : Choose solver: `astar` (fast, default) or `llm-tools` (LLM with code execution)
+- `--no-robot` : Visualization only, no robot connection
+- `--step-size N` : Path simplification interval (default: 60)
+- `--z-height Z` : Robot pen height in mm (default: -45)
+- `--wall-clearance N` : Safety margin around walls in pixels (default: 25)
+- `--debug` : Show detailed image processing steps
+
+**Examples:**
+```bash
+# Use A* solver (fast, deterministic)
+python main_maze_solver.py --solver astar
+
+# Use LLM solver (Claude writes and executes pathfinding code)
+python main_maze_solver.py --solver llm-tools
+
+# Adjust wall clearance for narrow mazes
+python main_maze_solver.py --wall-clearance 15
+
+# Debug mode to see processing steps
+python main_maze_solver.py --debug --no-robot
+```
+
+## System Architecture
+
+### Core Pipeline (`main_maze_solver.py`)
+
+1. **Image Acquisition**
+   - Load from file OR capture from camera
+   - If camera: homes robot first (camera mounted on end effector)
+
+2. **Circle Detection** (`maze_detector.py`)
+   - Detects red circle (HSV color filtering)
+   - Finds other colored circle (prioritizes green)
+   - User selects which circle is start/goal
+
+3. **Maze Preprocessing** (`maze_detector.py`)
+   - Converts to grayscale and applies Gaussian blur
+   - **Sobel edge detection**: Computes gradient magnitude to find edges
+   - Creates binary maze: 0=wall (black), 255=path (white)
+   - Removes circles from maze to avoid blocking paths
+   - Adds safety clearance around walls
+
+4. **Pathfinding**
+   - **A* Solver** (`maze_solver.py`): Fast, deterministic
+   - **LLM Tool Solver** (`llm_maze_solver.py`): Claude iteratively writes/executes code
+
+5. **Path Simplification**
+   - Takes every Nth waypoint to reduce robot movements
+   - Always keeps start and end points
+
+6. **Coordinate Transformation** (`camera_utilities.py`)
+   - Converts pixel (x, y) to robot coordinates (X, Y)
+   - Uses pre-calibrated affine matrix: `[X, Y]ᵀ = M × [u, v, 1]ᵀ`
+
+7. **Robot Execution** (`robot_utilities.py`)
+   - Homes robot to starting position
+   - Moves through each waypoint sequentially
+   - Closes connection when done
+
+### Supporting Modules
+
+- **`Affine_transform.py`** - Calibration matrix generation
+- **`get_pixel_cordinates.py`** - Interactive coordinate collection tool
+- **`open_camera.py`** - Standalone camera preview utility
 
 ## How It Works
 
-### 1. Circle Detection
-The system detects circles using HSV color space filtering:
-- **Red circle**: HSV range [0-10, 160-180] with saturation > 100
-- **Other circle**: Two-stage detection to avoid noise:
-  1. First, searches for green circles (broad HSV range 30-90)
-  2. If no green found, searches for any saturated color with stricter area filtering
+### Sobel Edge Detection (Maze Preprocessing)
 
-### 2. Maze Preprocessing
-Uses **edge detection** approach for accurate wall identification:
-- Converts image to grayscale
-- Applies Gaussian blur to reduce noise
-- **Canny edge detection** to find wall boundaries:
-  - Auto-calculates thresholds based on image median intensity
-  - Detects strong edges (wall boundaries)
-  - Produces thin, connected edge lines
-- **Morphological operations**:
-  - MORPH_CLOSE (3x3, 2x) connects broken edges
-  - Dilate edges (3x3, 2x) to thicken walls
-  - MORPH_CLOSE (5x5) fills small holes in paths
-  - MORPH_OPEN (3x3) removes noise
-- Removes colored circle areas to avoid interference
-- **Adds wall clearance** by dilating walls to create a safety margin
-- Result: Binary image (0 = wall, 255 = path) with precise wall boundaries
+The system uses **Sobel edge detection** to extract maze walls:
 
-### 3. Pathfinding (A* Algorithm)
-- Uses A* search algorithm with Manhattan distance heuristic
-- Finds optimal path from start to goal
-- 4-connected grid (up, down, left, right movements)
+1. **Compute gradients**: Sobel operators compute horizontal (Gx) and vertical (Gy) intensity gradients
+   ```
+   Magnitude = √(Gx² + Gy²)
+   ```
 
-### 4. Path Simplification
-- Reduces number of waypoints by taking every Nth point
-- Always includes start and end points
-- Reduces robot movement time
+2. **Create edge map**: High gradient areas indicate edges (wall boundaries)
 
-### 5. Coordinate Transformation
-- Converts pixel coordinates to robot workspace coordinates
-- Uses pre-calibrated affine transformation matrix
-- Formula: `[X, Y]ᵀ = M * [u, v, 1]ᵀ`
+3. **Morphological operations**:
+   - **Closing** (3x3 kernel, 2 iterations): Connects broken edges
+   - **Dilation** (3x3 kernel, 2 iterations): Thickens walls
+   - **Inversion**: Converts edges to binary (walls=black, paths=white)
 
-### 6. Robot Control
-- Homes the robot to origin
-- Moves through each waypoint sequentially
-- Announces "Done!" when reaching the end
+4. **Localized circle removal**: Only removes circles within 110px of start/goal positions
+
+5. **Wall clearance**: Dilates walls by N pixels for robot safety margin
+
+**Why Sobel?** Detects edges based on intensity changes, works well with mazes that have clear wall boundaries.
+
+### A* Pathfinding Algorithm
+
+**A*** is an informed search algorithm that finds the shortest path efficiently.
+
+**How it works:**
+1. Maintains a priority queue ordered by **f(n) = g(n) + h(n)**
+   - **g(n)**: Cost from start to node n (actual distance traveled)
+   - **h(n)**: Heuristic estimate from n to goal (Manhattan distance)
+
+2. **Algorithm steps:**
+   ```
+   1. Add start to open set with f(start) = h(start)
+   2. While open set not empty:
+      a. Pop node with lowest f-score
+      b. If node is goal → reconstruct path and return
+      c. For each valid neighbor:
+         - Calculate tentative g-score
+         - If better than previous → update and add to open set
+   3. If open set empty → no path exists
+   ```
+
+3. **Manhattan distance heuristic**: `h(n) = |x₁ - x₂| + |y₁ - y₂|`
+   - Admissible (never overestimates)
+   - Guarantees optimal path
+
+4. **4-connected movement**: Only up, down, left, right (no diagonals)
+
+5. **Goal radius**: If goal is blocked, finds path within 5px and draws straight line
+
+**Why A*?** Optimal, fast, and efficient for grid-based pathfinding.
+
+### LLM Tool-Based Solver
+
+Unlike traditional algorithms, the LLM solver uses **Claude Sonnet 4.5 with code execution tools**:
+
+1. **Setup**: Saves binary maze to temporary file
+2. **Iteration loop** (max 10 iterations):
+   - Claude writes Python pathfinding code
+   - Code executes in subprocess (30s timeout)
+   - Claude sees output/errors and can debug
+   - Extracts path from successful execution
+3. **Advantages**: Observable, debuggable, flexible algorithm choice
+4. **Cost**: ~$0.05 per maze, 10-30 seconds
+
+Requires `ANTHROPIC_API_KEY` environment variable.
+
+## Maze Requirements
+
+Your maze image should have:
+- **White background** for walkable paths
+- **Black walls** for obstacles
+- **One red circle** marking start or goal
+- **One other colored circle** (green recommended) for the other marker
+
+**Note**: The system will ask which circle is the start.
 
 ## Calibration
 
-If you need to recalibrate the pixel-to-robot coordinate transformation:
+To recalibrate pixel-to-robot coordinate transformation:
 
-1. Use `get_pixel_cordinates.py` to click on known points in the camera view
+1. Run `get_pixel_cordinates.py` to collect pixel coordinates from camera
 2. Move robot to corresponding positions and record coordinates
-3. Update the calibration points in `Affine_transform.py`
-4. Run the calibration to get new transformation matrix M
-5. Update the matrix M in `main_maze_solver.py`
+3. Update calibration pairs in `Affine_transform.py`
+4. Run calibration to compute new matrix M
+5. Update M in `main_maze_solver.py` (lines 27-29)
 
-## Creating Your Own Maze
-
-Your maze image should have:
-1. **White background** for paths
-2. **Black walls** for obstacles
-3. **One red circle** as a marker (start or end)
-4. **One other colored circle** (any color: green, blue, yellow, etc.) as the second marker
-
-The system automatically detects the red circle and then finds any other colored circle. The user will be prompted to choose which circle is the start point.
+**Important**: Camera must be at home position during calibration and image capture!
 
 ## Troubleshooting
 
-### "Could not detect red circle"
-- Ensure the red circle is clearly visible in good lighting
-- Check that the red color is saturated enough (not too pale/pink)
-- Adjust HSV ranges in `maze_detector.py` if needed
+### "Could not detect circles"
+- Ensure good lighting and color saturation
+- Red circle HSV range: [0-10, 160-180]
+- Use green for the second circle (best detection)
 
-### "Could not detect the other circle"
-- **Use green for best results** - the algorithm prioritizes green circles
-- Ensure the second circle has a saturated color (not gray/white/black)
-- The circle should be at least 50 pixels away from the red circle
-- Make the circle large enough (at least 100 pixels² area)
-- If using a non-green color, make it even larger (300+ pixels²) to avoid being filtered as noise
+### "No path found"
+- Run with `--debug` to see preprocessing steps
+- Check that walls appear as BLACK and paths as WHITE in binary image
+- Reduce `--wall-clearance` if narrow passages are blocked
 
-### "No path found" or "Path goes through walls"
-**First, diagnose the problem with debug mode:**
-```bash
-python main_maze_solver.py maze.png --no-robot --debug
-```
-
-This shows you processing stages:
-1. Original image
-2. Grayscale conversion
-3. Blurred image
-4. Canny edges (edge boundaries detected)
-5. Edges closed & dilated (walls as white lines)
-6. Inverted binary (0=walls BLACK, 255=paths WHITE)
-7. Color mask (circles removed)
-8. Final with clearance
-
-**If walls aren't detected properly (stages 4-6):**
-- Check stage 4 (Canny Edges) - should show clean edge lines
-- Ensure maze has good contrast for edge detection
-- Walls should have clear boundaries
-- Stage 6 should show walls as solid BLACK, paths as WHITE
-
-**If path is blocked by clearance (stage 5):**
-- Try reducing wall clearance: `--wall-clearance 2` or `--wall-clearance 0`
-- The default clearance (5px) might be too large for narrow passages
-
-**If path goes through walls even after proper detection:**
-- This indicates a bug - please check the preprocessed maze window
-- The path should only follow white pixels in the binary maze
-
-### Robot connection issues
-- Verify Dobot is connected to `/dev/ttyACM0`
-- Check USB connection and permissions
-- Try different port if needed (update in `main_maze_solver.py`)
-
-### Robot movements are inaccurate
-- Recalibrate the affine transformation matrix
-- Ensure camera position hasn't changed since calibration
+### Robot movements inaccurate
+- Recalibrate transformation matrix
+- Ensure camera at home position during capture
 - Verify robot workspace limits
 
-## Advanced Usage
+### "Start/Goal position is on a wall"
+- Increase wall clearance or adjust circle positions
+- Check binary maze in debug mode
 
-### Using from Camera Instead of Image File
+## Project Structure
 
-You can modify `main_maze_solver.py` to capture from a camera:
-
-```python
-# Instead of cv2.imread(image_path)
-cap = cv2.VideoCapture(0)
-ret, image = cap.read()
-cap.release()
+```
+maze/
+├── main_maze_solver.py       # Main pipeline
+├── maze_detector.py           # Circle detection, Sobel preprocessing
+├── maze_solver.py             # A* pathfinding
+├── llm_maze_solver.py         # LLM tool-based solver
+├── camera_utilities.py        # Affine/homography transforms
+├── robot_utilities.py         # Dobot control functions
+├── Affine_transform.py        # Calibration matrix generation
+└── get_pixel_cordinates.py    # Calibration data collection
 ```
 
-### Adjusting Pathfinding
+## Camera & Robot Setup
 
-To use 8-connected pathfinding (including diagonals), modify `get_neighbors()` in `maze_solver.py`:
+**Important**: Camera is mounted on Dobot end effector!
 
-```python
-def get_neighbors(pos):
-    x, y = pos
-    return [
-        (x, y-1), (x, y+1), (x-1, y), (x+1, y),  # 4-connected
-        (x-1, y-1), (x-1, y+1), (x+1, y-1), (x+1, y+1)  # diagonals
-    ]
-```
+- When capturing from camera, robot automatically homes first
+- Ensures consistent camera angle for calibration matrix
+- Robot closes connection after homing, reconnects for maze solving
 
-## License
+This is critical for accurate coordinate transformation.
 
-This project is for educational and research purposes.
+---
 
-## Contributing
-
-Feel free to submit issues and enhancement requests!
+**License**: Educational and research use
+**Requirements**: Python 3.7+, OpenCV, NumPy, pydobot, anthropic (for LLM solver)
